@@ -47,8 +47,16 @@ files/                  pack output (gitignored)
 # Host (one terminal): starts server AND bridge, prints the tcp... address
 ./ut99 server --mode instagib --bots 4
 
+# [optional, once per new friend] friend has no game install yet:
+./ut99 pack                     # [optional] host: -> files/ut99-wineprefix.tgz (+ .sha256)
+./ut99 file-serve               # [optional] host, own terminal (alongside the server):
+                                #            prints a SECOND tcp... address, for the files
+./ut99 file-pull <file-serve tcp... address> --deploy
+                                # [optional] friend: fetch + unpack into their WINEPREFIX
+
 # Each friend (one terminal): bridge + game in one command
 ./ut99 client tcpGFwWCDL...     # the address the host printed
+                                # [optional] --name Archon (player name, max 16 chars)
 
 # Host player's own game (second terminal)
 ./ut99 client                   # direct LAN join, no bridge
@@ -58,21 +66,6 @@ files/                  pack output (gitignored)
 
 Ctrl+C anywhere stops everything that command started (bridges, server, game).
 LAN-only play: `./ut99 server --lan`, clients join `host-ip:7777`.
-
-Optional steps for a first session with a new friend:
-
-```sh
-# 1. Friend has no game install yet: host serves them the game files (one time)
-./ut99 pack                     # host, once: -> files/ut99-wineprefix.tgz (+ .sha256)
-./ut99 file-serve               # host, own terminal (alongside the server):
-                                # prints a SECOND tcp... address, for the files
-
-# 2. Friend fetches + unpacks the game into their WINEPREFIX (one time)
-./ut99 file-pull <file-serve tcp... address> --deploy
-
-# 3. Friend joins with a chosen player name (any client run, optional)
-./ut99 client <bridge tcp... address> --name Archon
-```
 
 `--name` writes the player name into `[DefaultPlayer] Name` in `User.ini`
 (the engine takes it from there into the join URL); omit it and the wrapper
