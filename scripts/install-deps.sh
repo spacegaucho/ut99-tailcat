@@ -36,7 +36,7 @@ if command -v "$WINE_BIN" >/dev/null 2>&1; then
   if command -v ldconfig >/dev/null 2>&1; then
     gl_missing=""
     for lib in libGL.so.1 libEGL.so.1; do
-      ldconfig -p 2>/dev/null | grep -qE "(^|[[:space:]])${lib}[[:space:]]" || gl_missing="$gl_missing $lib"
+      ldconfig -p 2>/dev/null | grep -qE "(^|[[:space:]])${lib} \(libc6" || gl_missing="$gl_missing $lib"
     done
     if [ -n "$gl_missing" ]; then
       err "GL loader libs missing:$gl_missing — wine would run with OpenGL disabled and the game would crash."
@@ -44,6 +44,20 @@ if command -v "$WINE_BIN" >/dev/null 2>&1; then
       err "Arch:          sudo pacman -S mesa"
       err "Fedora:        sudo dnf install mesa-libGL mesa-libEGL mesa-dri-drivers"
       exit 1
+    fi
+    # 469 is a 32-bit app: unless the wine build does its WoW64 graphics work
+    # in a 64-bit host process, wined3d dlopens the 32-bit libGL/libEGL.  apt
+    # calls the 64-bit copies "already the newest version" — check for 32-bit
+    # entries too (ldconfig marks them "(libc6)", 64-bit ones "(libc6,x86-64)").
+    gl32=""
+    for lib in libGL.so.1 libEGL.so.1; do
+      ldconfig -p 2>/dev/null | grep -qE "(^|[[:space:]])${lib} \(libc6\)" || gl32="$gl32 $lib"
+    done
+    if [ -n "$gl32" ]; then
+      echo "warning: no 32-bit entries for:$gl32 in ldconfig — 469 is a 32-bit app and may crash"
+      echo "         ('Failed to load libGL', 'd3d11.dll ... not found') without them."
+      echo "         Ubuntu/Debian: sudo dpkg --add-architecture i386 && sudo apt update &&"
+      echo "                        sudo apt install libgl1:i386 libegl1:i386 libgl1-mesa-dri:i386"
     fi
   fi
 else

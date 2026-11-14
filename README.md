@@ -427,10 +427,24 @@ errors; a zsh user can wrap this with bashcompinit).
   and 469's D3D11Drv renderer can't load. Install them — Ubuntu/Debian
   `sudo apt install libgl1 libegl1 libgl1-mesa-dri`, Arch `sudo pacman -S
   mesa`, Fedora `sudo dnf install mesa-libGL mesa-libEGL mesa-dri-drivers` —
-  `./ut99 deps` now checks for this. `err:hid:udev_bus_init UDEV monitor
-  creation failed` is harmless (input permissions), and the wall of
+  `./ut99 deps` now checks for this. If apt answers "already the newest
+  version", what's missing is the **32-bit** copies (469 is a 32-bit process):
+  `sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install
+  libgl1:i386 libegl1:i386 libgl1-mesa-dri:i386`; confirm with
+  `ldconfig -p | grep -E 'lib(GL|EGL)\.so\.1'` — 32-bit entries show as
+  `(libc6)`, 64-bit ones as `(libc6,x86-64)`. `err:hid:udev_bus_init UDEV
+  monitor creation failed` is harmless (input permissions), and the wall of
   `dbghelp/dwarf2 fixme` lines is just wine dumping the crash backtrace, not
   a second cause.
+- **`Critical Error: Assertion failed: RenDev` on a friend's machine**: the
+  engine booted but no render device could be created — the deployed prefix's
+  `UnrealTournament.ini` selects the host's renderer
+  (`GameRenderDevice=D3D11Drv.D3D11RenderDevice`), and D3D11Drv can fail under
+  wine on some Intel iGPUs. 469 ships the fallbacks; the safest one under
+  wine/Mesa is OpenGLDrv:
+  `sed -i 's/^GameRenderDevice=.*/GameRenderDevice=OpenGLDrv.OpenGLRenderDevice/' ~/wine/unreal-tournament/drive_c/UnrealTournament/System/UnrealTournament.ini`
+  (or `D3D9Drv.D3D9RenderDevice`). The ini's `WindowedViewportX/Y` also comes
+  from the host's monitor — lower it if the friend's screen is smaller.
 - **Master servers**: with `DISABLE_UPLINKS=1` the server doesn't advertise
   itself to public masters (private games, no spam to mostly dead uplinks).
   Restore the `*.ut99bak` files to undo.
