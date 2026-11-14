@@ -28,42 +28,49 @@ S="$ROOT/scripts"
 source "$ROOT/helpers/ut99-env.sh"
 
 usage() {
-  cat <<'EOF'
-ut99 — Unreal Tournament 99 over LAN or the internet (tailcat + framed UDP relay)
+  # ANSI accents: commands in bold cyan, section headers bold.  Plain text
+  # when stdout is not a terminal (pipes, redirects — alignment is identical).
+  if [ -t 1 ]; then
+    local B=$'\e[1m' K=$'\e[1;36m' R=$'\e[0m'
+  else
+    local B='' K='' R=''
+  fi
+  cat <<EOF
+${B}ut99${R} — Unreal Tournament 99 over LAN or the internet (tailcat + framed UDP relay)
 
-USAGE
-  ut99 server  [options]        Dedicated server. Default also starts the
+${B}USAGE${R}
+  ${K}ut99 server${R}  [options]        Dedicated server. Default also starts the
                                 tailcat host bridge and prints the tcp...
-                                address; the host player joins with `ut99 client`.
-  ut99 client  [tcp...] [opts]   Game client. With a tcp... address it starts the
+                                address; the host player joins with \`${K}ut99 client\`${R}.
+  ${K}ut99 client${R}  [tcp...] [opts]   Game client. With a tcp... address it starts the
                                 client bridge first, waits until the tunnel is
                                 up, then launches the game (auto-joins during
                                 the intro). Without an address: direct LAN join.
-  ut99 bridge  host [--bridge-port N] [--port N] [--tc-key NAME]
-  ut99 bridge  client <tcp...> [--bridge-port N] [--host-port N] [--port N] [--tc-key NAME]
+  ${K}ut99 bridge${R}  host [--bridge-port N] [--port N] [--tc-key NAME]
+  ${K}ut99 bridge${R}  client <tcp...> [--bridge-port N] [--host-port N] [--port N] [--tc-key NAME]
                                 Run only one side of the bridge (separate terminals).
-  ut99 probe   [port]           Send a net-test datagram to 127.0.0.1:port
+  ${K}ut99 probe${R}   [port]           Send a net-test datagram to 127.0.0.1:port
                                 (default 7777); a reply proves server/bridge up.
-  ut99 pack    [--out PATH] [--keep LIST] [--prefix DIR]
+  ${K}ut99 pack${R}    [--out PATH] [--keep LIST] [--prefix DIR]
                                 Packs the wine prefix; scrubs the player name
                                 out of User.ini in the packed copy (key
                                 bindings and settings are kept).
-  ut99 deploy  [--tgz PATH] [--prefix DIR] [--force]
-  ut99 file-serve [DIR] [--dir DIR] [--tc-key NAME]
+  ${K}ut99 deploy${R}  [--tgz PATH] [--prefix DIR] [--force]
+  ${K}ut99 file-serve${R} [DIR] [--dir DIR] [--tc-key NAME]
                                 Serve DIR (default ./files: the tgz + .sha256)
                                 read-only over tailcat's file service; friends
                                 fetch it with tailcat cp (see command help).
-  ut99 file-pull <tcp...> [--dir DIR] [--tgz NAME] [--force] [--no-verify]
+  ${K}ut99 file-pull${R} <tcp...> [--dir DIR] [--tgz NAME] [--force] [--no-verify]
                           [--deploy]
                                 Fetch the tgz + .sha256 from a host's file-serve
                                 into files/ and verify it (skips the download
                                 when the local copy already matches; see help).
-  ut99 deps                     install tailcat + python3 if missing,
+  ${K}ut99 deps${R}                     install tailcat + python3 if missing,
                                 check wine presence (see help)
-  ut99 --completion bash        bash completion script:
+  ${K}ut99 --completion bash${R}        bash completion script:
                                 source <(./ut99 --completion bash)
 
-SERVER game options
+${B}SERVER game options${R}
   --map NAME            Map to start on                     (default CTF-Face)
   --mode ctf|dm|instagib|team|dom
                         Game mode preset (pure presets, no mutators)
@@ -85,13 +92,13 @@ SERVER game options
                         — overrides ALL of the above assembly (incl. ini writes)
   --keep-uplinks        Do NOT comment out master-server uplink lines
 
-Networking options (server)
+${B}Networking options (server)${R}
   --lan                 Server only, no bridges (plain LAN game on UDP 7777)
   --port N              Server UDP port (default 7777); the host bridge follows
   --bridge-port N       Host bridge TCP port                (default 8777)
   --tc-key NAME         Saved tailcat key name (stable tcp... address)
 
-Networking options (client)
+${B}Networking options (client)${R}
   --lan                 No bridge; join directly (default target 127.0.0.1:port)
   --join HOST:PORT      Explicit join target instead of the auto-join default
   --name NAME           Player name written to [DefaultPlayer] in User.ini.
@@ -109,7 +116,7 @@ Networking options (client)
                         fixed at 24-bit — Xvfb here refuses 32-bit screens)
   -- ARGS               Everything after '--' is passed to the game untouched
 
-Options valid on server/client/deploy/pack
+${B}Options valid on server/client/deploy/pack${R}
   --prefix DIR          WINEPREFIX override (all four)
   --wine-bin PATH       wine binary override (server/client)
 EOF
