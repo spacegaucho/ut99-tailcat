@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ut99-env.sh — shared configuration for all ut99-socat-tailcat scripts.
 #
-# Sourced by the other scripts. Every value can be overridden through the
-# environment, e.g.:
+# Sourced by the ut99 wrapper and by the scripts in scripts/.  Every value can
+# be overridden through the environment, e.g.:
 #   UT_UDP_PORT=7778 ./client-start-bridge.sh tcpXXXX
 #   MAP=CTF-1on1-Jail2 ./host-start-server.sh
 #
@@ -96,4 +96,44 @@ start_job_trap() {
     wait 2>/dev/null || true
   }
   trap cleanup EXIT INT TERM
+}
+
+# ini_set <ini-file> <Section> <Key> <Value> — replace/add a key inside an ini
+# section; appends the section at EOF when missing. Preserves the file's line
+# endings (CRLF when the file uses them) and touches nothing else.
+ini_set() {
+  local file="$1" section="$2" key="$3" value="$4"
+  local crlf=""
+  [ -f "$file" ] && head -1 "$file" | grep -q $'\r' && crlf=$'\r'
+  awk -v sec="[$section]" -v key="$key" -v kv="$key=$value" -v crlf="$crlf" '
+    BEGIN { done = 0; insec = 0 }
+    {
+      line = $0; sub(/\r$/, "", line)
+      if (line == sec) { insec = 1; print $0; next }
+      if (insec && line ~ /^\[/) {
+        if (!done) { print kv crlf; done = 1 }
+        insec = 0
+      }
+      if (insec && line ~ "^" key "=") { print kv crlf; done = 1; next }
+      print $0
+    }
+    END {
+      if (!done) { print ""; print sec crlf; print kv crlf }
+    }
+  ' "$file" > "$file.ut99tmp" && mv "$file.ut99tmp" "$file"
+}
+
+# ini_get <ini-file> <Section> <Key> — print the key's value (first match).
+ini_get() {
+  local file="$1" section="$2" key="$3"
+  [ -f "$file" ] || return 0
+  awk -v sec="[$section]" -v key="$key" '
+    BEGIN { insec = 0 }
+    {
+      line = $0; sub(/\r$/, "", line)
+      if (line == sec) { insec = 1; next }
+      if (line ~ /^\[/) { insec = 0 }
+      if (insec && line ~ "^" key "=") { sub(/^[^=]*=/, "", line); print line; exit }
+    }
+  ' "$file"
 }

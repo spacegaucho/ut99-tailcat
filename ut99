@@ -6,7 +6,7 @@
 #   ut99 client  [tcp...] [tunnel options]           game (+ internet bridge)
 #   ut99 bridge  host|client ...                    bridges only
 #   ut99 probe   [port]                             net-test a listening server
-#   ut99 pack / deploy / deps                       prefix tarball helpers
+#   ut99 pack / deploy / serve / deps               prefix tarball helpers
 #   ut99 help                                       this list
 #
 # Direct LAN play: `ut99 server --lan`, then clients join host-ip:7777
@@ -21,6 +21,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 S="$ROOT/scripts"
+# Shared env defaults (WINEPREFIX/UT_DIR/ports/...).  Everything is :-based,
+# so flags/exported vars set below still win.
+source "$ROOT/helpers/ut99-env.sh"
 
 usage() {
   cat <<'EOF'
@@ -40,7 +43,14 @@ USAGE
   ut99 probe   [port]           Send a net-test datagram to 127.0.0.1:port
                                 (default 7777); a reply proves server/bridge up.
   ut99 pack    [--out PATH] [--keep LIST] [--prefix DIR]
+                                Packs the wine prefix; scrubs the player name
+                                out of User.ini in the packed copy (key
+                                bindings and settings are kept).
   ut99 deploy  [--tgz PATH] [--prefix DIR] [--force]
+  ut99 serve   [DIR] [--tc-key NAME]
+                                Serve DIR (default ./files: the tgz + .sha256)
+                                read-only over tailcat's file service; friends
+                                fetch it with tailcat cp (see command help).
   ut99 deps
 
 SERVER game options
@@ -51,11 +61,18 @@ SERVER game options
   --game CLASS          Override the mode mapping entirely, e.g. Botpack.TeamGamePlus
   --mutators a,b,c      Additional mutators (InstaGib via --instagib)
   --bots N              Bot fill up to N players            (default 4)
-  --skill 0-7           Bot difficulty: 0 Novice .. 7 Godlike (default 3)
+  --skill 0-7           Game/bot difficulty written to [Botpack.ChallengeBotInfo]
+                        0-3 = novice mode, 4-7 = same levels without it (default 3)
   --goal N              GoalScore                           (default 5)
   --time MIN            TimeLimit in minutes                (default 15)
+  --no-ini              Don't write the four options below into UnrealTournament.ini
+                        NOTE: the engine reads MinPlayers/GoalScore/TimeLimit from
+                        the game type's ini section and bot Difficulty from
+                        [Botpack.ChallengeBotInfo] — not from URL options.  ut99
+                        writes them there by default, which is why --bots and
+                        --skill work at all.
   --opts RAW            Full raw URL options, e.g. '?GoalScore=10?Game=...'
-                        — overrides ALL of the above assembly
+                        — overrides ALL of the above assembly (incl. ini writes)
   --keep-uplinks        Do NOT comment out master-server uplink lines
 
 Networking options (server)
@@ -67,6 +84,9 @@ Networking options (server)
 Networking options (client)
   --lan                 No bridge; join directly (default target 127.0.0.1:port)
   --join HOST:PORT      Explicit join target instead of the auto-join default
+  --name NAME           Player name written to [DefaultPlayer] in User.ini.
+                        Default when omitted: a random Player-XXXX. Max 16
+                        characters (the engine's PlayerName limit).
   --port N              Local UDP port the client uses/joins (default 7777)
   --bridge-port N       Client-side bridge TCP port          (default 8777)
   --host-port N         Host bridge TCP port it connects to  (default 8777)
@@ -90,6 +110,8 @@ err() { echo "ut99: $*" >&2; }
 need_int() {   # need_int <name> <value> — integer check
   [[ "$2" =~ ^[0-9]+$ ]] || { err "$1 needs a number, got: $2"; exit 2; }
 }
+
+# ini_set() lives in helpers/ut99-env.sh (used here and by host-pack-prefix.sh).
 
 # ---- shared trap for combined (server+bridge / bridge+game) modes ----------
 # What we started in combined mode decides what cleanup is allowed to touch.
@@ -168,7 +190,7 @@ monitor_jobs() {
 cmd_server() {
   local map=CTF-Face mode=ctf insta=0 game_type="" mutators="" raw_opts=""
   local bots=4 skill=3 goal=5 time=15 lan=0 port="" bridge_port=""
-  local uplinks=1 m
+  local uplinks=1 ini=1 m
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -187,13 +209,14 @@ cmd_server() {
       --bridge-port) bridge_port="$2"; need_int --bridge-port "$bridge_port"; shift 2 ;;
       --tc-key)   export TAILCAT_KEY="$2"; shift 2 ;;
       --keep-uplinks) uplinks=0; shift ;;
+      --no-ini)   ini=0; shift ;;
       --prefix)   export WINEPREFIX="$2"; shift 2 ;;
       --wine-bin) export WINE_BIN="$2"; shift 2 ;;
       -h|--help)  sed -n '/^SERVER game options/,/^Networking options (server)/p' <<EOF
 SERVER game options
   --map NAME  --mode ctf|dm|instagib|team|dom  --instagib  --game CLASS
   --mutators a,b  --opts RAW  --bots N  --skill 0-7  --goal N  --time MIN
-  --keep-uplinks   --lan  --port N  --bridge-port N  --tc-key NAME  --prefix DIR  --wine-bin PATH
+  --no-ini  --keep-uplinks   --lan  --port N  --bridge-port N  --tc-key NAME  --prefix DIR  --wine-bin PATH
 EOF
         exit 0 ;;
       *) err "unknown server option: $1"; exit 2 ;;
@@ -225,7 +248,13 @@ EOF
     extra="$raw_opts"                       # full passthrough wins
   else
     [ "${#mut[@]}" -gt 0 ] && extra+="?Mutator=$(IFS=+; echo "${mut[*]}")"
-    extra+="?MinPlayers=$bots?GoalScore=$goal?TimeLimit=$time?Difficulty=$skill"
+    # MinPlayers/GoalScore/TimeLimit are `globalconfig` in the game classes —
+    # the engine reads them from UnrealTournament.ini, NOT from the URL (a
+    # ?MinPlayers= URL option is silently ignored).  With ini writing on we
+    # put 0 in the URL so the ini value is the only thing in effect.
+    local ini_minplayers="$bots"
+    [ "$ini" = 1 ] && ini_minplayers=0
+    extra+="?MinPlayers=$ini_minplayers?GoalScore=$goal?TimeLimit=$time?Difficulty=$skill"
   fi
   if [ -n "$port" ]; then
     export UT_UDP_PORT="$port"
@@ -233,6 +262,28 @@ EOF
   fi
   [ -n "$bridge_port" ] && export BRIDGE_TCP_PORT="$bridge_port"
   export MAP="$map" GAME_TYPE="$game_type" EXTRA_OPTS="$extra" DISABLE_UPLINKS="$uplinks"
+
+  if [ "$ini" = 1 ] && [ -z "$raw_opts" ]; then
+    # Write the game options into the game-type's ini section — the only
+    # place the engine actually reads them (e.g. [Botpack.CTFGame]
+    # MinPlayers=4).  Keys are replaced in place; nothing else is touched.
+    local ini_file="$UT_DIR/UnrealTournament.ini" sec="$game_type"
+    if [ ! -f "$ini_file" ]; then
+      err "ut99 server: no $ini_file — cannot write game options (check UT_DIR/--prefix); bots/goal/time ignored"
+    else
+      # ini sections are named with the package-qualified class; `--game CTFGame`
+      # still resolves to Botpack.CTFGame at runtime, so qualify it here.
+      [[ "$sec" == *.* ]] || sec="Botpack.$sec"
+      ini_set "$ini_file" "$sec" MinPlayers "$bots"
+      ini_set "$ini_file" "$sec" GoalScore "$goal"
+      ini_set "$ini_file" "$sec" TimeLimit "$time"
+      # Bot skill: SpawnBot() re-reads `Difficulty = BotConfig.Difficulty` for
+      # every bot, so the only value that matters is ChallengeBotInfo's ini key
+      # (0..3 novice levels, 4..7 the same levels without novice mode).
+      ini_set "$ini_file" Botpack.ChallengeBotInfo Difficulty "$skill"
+      err "ut99 server: ini options written to [$sec]: MinPlayers=$bots GoalScore=$goal TimeLimit=$time; [Botpack.ChallengeBotInfo] Difficulty=$skill (--no-ini to skip)"
+    fi
+  fi
 
   echo "ut99 server: map=$map game=$game_type opts=$extra lan=$lan"
 
@@ -254,7 +305,7 @@ EOF
 
 # ---- ut99 client ------------------------------------------------------------
 cmd_client() {
-  local tc="" lan=0 join="" port="" bridge_port="" host_port="" nojoin=0
+  local tc="" lan=0 join="" name="" port="" bridge_port="" host_port="" nojoin=0
   local xvfb="" xvfb_res="${UT99_XVFB_RES:-2560x1440}"
   local game_args=() game_cmd=()
 
@@ -262,6 +313,7 @@ cmd_client() {
     case "$1" in
       --lan)     lan=1; shift ;;
       --join)    join="$2"; shift 2 ;;
+      --name)    name="$2"; shift 2 ;;
       --port)    port="$2"; need_int --port "$port"; shift 2 ;;
       --bridge-port) bridge_port="$2"; need_int --bridge-port "$bridge_port"; shift 2 ;;
       --host-port) host_port="$2"; need_int --host-port "$host_port"; shift 2 ;;
@@ -274,7 +326,7 @@ cmd_client() {
       --wine-bin) export WINE_BIN="$2"; shift 2 ;;
       -h|--help) sed -n '/^Networking options (client)/,/^Options valid/p' <<EOF
 Networking options (client)
-  --lan  --join HOST:PORT  --port N  --bridge-port N  --host-port N
+  --lan  --join HOST:PORT  --name NAME  --port N  --bridge-port N  --host-port N
   --tc-key NAME  --no-join  --xvfb/--no-xvfb  --xvfb-res WxH
   -- ARGS (passed to the game)  --prefix DIR  --wine-bin PATH
 EOF
@@ -291,6 +343,30 @@ EOF
   [ "$nojoin" = 1 ] && export UT_AUTOJOIN=0
 
   local ut_udp_port="${UT_UDP_PORT:-7777}"
+
+  # Player name: the engine reads it from [DefaultPlayer] Name in User.ini and
+  # puts it in the join URL (?Name=...) when browsing a server. With --name the
+  # user picks it; without one we generate a throwaway Player-XXXX so ut99
+  # players show up with a plain default name instead of whatever the prefix's
+  # User.ini happens to contain. The engine caps PlayerName at 16 characters.
+  if [ -z "$name" ]; then
+    name="Player-$(( 1000 + RANDOM % 9000 ))"
+  fi
+  # ? and = are URL/ini option separators, ' is quote-breakage; newlines
+  # cannot occur inside a single shell argument.
+  case "$name" in
+    *[\?=\"\']*) err "invalid player name (contains ? = \" or '): $name"; exit 2 ;;
+  esac
+  if [ "${#name}" -gt 16 ]; then
+    err "player name truncated to 16 chars: ${name:0:16}"
+    name="${name:0:16}"
+  fi
+  if [ ! -f "$UT_DIR/User.ini" ]; then
+    err "note: $UT_DIR/User.ini did not exist; created it (the game fills in the rest on first save)."
+    : > "$UT_DIR/User.ini"
+  fi
+  ini_set "$UT_DIR/User.ini" DefaultPlayer Name "$name"
+  echo "Player name: $name  ([DefaultPlayer] Name in $UT_DIR/User.ini)"
 
   # Xvfb for the game window: explicit flag wins; otherwise automatic when
   # there is no DISPLAY (e.g. ssh/headless sessions). Depth is x24: Xvfb on
@@ -415,6 +491,27 @@ cmd_deploy() {
   exec "$S/client-deploy-prefix.sh"
 }
 
+cmd_serve() {
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --dir)    export UT99_SERVE_DIR="$2"; shift 2 ;;
+      --tc-key) export TAILCAT_KEY="$2"; shift 2 ;;
+      -h|--help) cat <<'EOF'
+ut99 serve [DIR] [--dir DIR] [--tc-key NAME]
+  Serves DIR (default: the repo's files/ directory) read-only through
+  tailcat's files service (SFTP over tailcat; scp does the transferring).
+  Friends fetch the pack with:
+    tailcat cp <tcp...>:ut99-wineprefix.tgz .
+    tailcat cp <tcp...>:ut99-wineprefix.tgz.sha256 .
+    sha256sum -c ut99-wineprefix.tgz.sha256 && ./ut99 deploy
+EOF
+        exit 0 ;;
+      *) break ;;
+    esac
+  done
+  exec "$S/host-serve-files.sh" "$@"
+}
+
 # ---- dispatch ----------------------------------------------------------------
 cmd="${1:-help}"; shift || true
 case "$cmd" in
@@ -424,6 +521,7 @@ case "$cmd" in
   probe)  cmd_probe "$@" ;;
   pack)   cmd_pack "$@" ;;
   deploy) cmd_deploy "$@" ;;
+  serve)  cmd_serve "$@" ;;
   deps)   exec "$S/install-deps.sh" "$@" ;;
   help|-h|--help) usage ;;
   *) err "unknown command: $cmd"; echo; usage; exit 2 ;;

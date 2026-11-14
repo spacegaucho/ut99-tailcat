@@ -3,7 +3,9 @@
 Play an Unreal Tournament 99 (GOTY) LAN game across the internet using
 [tailcat](https://github.com/tailscale/tailcat) (WireGuard-encrypted
 point-to-point tunnel via DERP, no accounts/ports/VPN setup) bridged with
-socat, because tailcat's CLI only forwards TCP ports while UT99 speaks UDP:
+socat, because tailcat's forwarded ports are TCP-only while UT99 speaks UDP
+(tailcat's separate built-in file service is the one exception — used by
+`ut99 serve` to share the game pack):
 
 ```
 UT99 client --UDP :7777--> socat --TCP :8777--> tailcat forward
@@ -18,7 +20,7 @@ default (dead once the host stops), stable if you generate a saved key.
 ## Layout
 
 ```
-ut99                    single wrapper: server / client / bridge / probe / pack / deploy / deps
+ut99                    single wrapper: server / client / bridge / probe / pack / deploy / serve / deps
 scripts/                engine scripts (all usable standalone, wrapper just drives them)
   host-start-server.sh          UCC dedicated server (Lutris wine install)
   host-start-bridge.sh          tailcat serve + socat TCP→UDP, prints the tcp... address
@@ -26,6 +28,7 @@ scripts/                engine scripts (all usable standalone, wrapper just driv
   client-start-ut99.sh          game client with auto-join
   host-pack-prefix.sh           pack the wine prefix into files/ut99-wineprefix.tgz (+ .sha256)
   client-deploy-prefix.sh       friend side: verify + extract the tarball
+  host-serve-files.sh           tailcat file service: share the tarball + .sha256
   install-deps.sh               socat (pacman/apt) + tailcat (GitHub release, sha256-checked)
 helpers/ut99-env.sh     shared config (every value overridable via environment)
 files/                  pack output (gitignored)
@@ -59,8 +62,9 @@ LAN-only play: `./ut99 server --lan`, clients join `host-ip:7777`.
 | `ut99 client`   | Game client. With a `tcp...` address it starts the client bridge first and launches the game once the tunnel is up; without one, joins directly (LAN). |
 | `ut99 bridge host\|client …` | Run only one side of the bridge (separate terminals). |
 | `ut99 probe [port]` | Send a net-test datagram to `127.0.0.1:port`; a reply proves server/bridge up. |
-| `ut99 pack`     | Pack the wine prefix → `files/ut99-wineprefix.tgz` + `.sha256`.    |
+| `ut99 pack`     | Pack the wine prefix → `files/ut99-wineprefix.tgz` + `.sha256` (scrubs your player name out of the packed copy). |
 | `ut99 deploy`   | Verify + extract the tarball into `WINEPREFIX`.                    |
+| `ut99 serve [DIR]` | Serve `DIR` (default `files/`) read-only through tailcat's file service; friends fetch with `tailcat cp`. |
 | `ut99 deps`     | Install socat + tailcat if missing.                                |
 
 ### Server game options
@@ -73,15 +77,60 @@ LAN-only play: `./ut99 server --lan`, clients join `host-ip:7777`.
 | `--game CLASS`      | Override the mode mapping, e.g. `Botpack.TeamGamePlus` |
 | `--mutators a,b`    | Extra mutators → `?Mutator=a+b`                     |
 | `--bots N`          | `MinPlayers` bot fill (default 4)                   |
-| `--skill 0-7`       | `Difficulty` (0 Novice … 7 Godlike, default 3)      |
+| `--skill 0-7`       | Game/bot difficulty → `[Botpack.ChallengeBotInfo] Difficulty` (0-3 novice, 4-7 not, default 3) |
 | `--goal N`          | `GoalScore` (default 5)                             |
 | `--time MIN`        | `TimeLimit` in minutes (default 15)                 |
-| `--opts RAW`        | Full raw URL options, overrides all assembly above  |
+| `--no-ini`          | Don't write those three into `UnrealTournament.ini` (see below) |
+| `--opts RAW`        | Full raw URL options, overrides all assembly above (and skips the ini writes) |
 | `--keep-uplinks`    | Do NOT comment out master-server uplink lines       |
 
 Mode mapping: `ctf`→`Botpack.CTFGame`, `dm`→`Botpack.DeathMatchPlus`,
 `instagib`→`Botpack.DeathMatchPlus` + `Botpack.InstaGibDM` mutator,
 `team`→`Botpack.TeamGamePlus`, `dom`→`Botpack.Domination`.
+
+#### Why `--bots`/`--goal`/`--time` are written into the ini
+
+`MinPlayers`, `GoalScore` and `TimeLimit` are declared `var() globalconfig` in
+the game classes (`System/Botpack.u`, shipped source on 469), so the engine
+reads them from **`UnrealTournament.ini`**, and a `?MinPlayers=4` URL option is
+silently ignored — a server whose ini says `MinPlayers=0` stays bot-free no
+matter what the URL says. So `ut99 server` writes them into the game type's own
+ini section before launching UCC:
+
+```ini
+[Botpack.CTFGame]
+MinPlayers=4      # total players: you + 3 bots
+GoalScore=5
+TimeLimit=15
+```
+
+`ini_set` replaces the key in place (or adds it), keeps CRLF line endings and
+touches nothing else; `--no-ini` (or `--opts RAW`) leaves your ini alone, and
+then those numbers have to come from the ini itself.
+
+`--skill` has the same trap from the other side. `TournamentGameInfo.SpawnBot()`
+begins with `Difficulty = BotConfig.Difficulty;`, i.e. it *overwrites* the game's
+`Difficulty` (a plain `var byte` in `Engine.GameInfo`, so `?Difficulty=` in the URL
+is only read once in `InitGame` and then overwritten) with
+`[Botpack.ChallengeBotInfo] Difficulty` from the ini — again a `config` key.
+Values 0..3 are the four skill levels in novice mode, 4..7 the same levels with
+novice mode off, and `InitializeSkill` also sets the bot's `bNovice` flag from it.
+
+Measured on this install (ini-only run, `InitGame` line proves no `?Difficulty=` was
+in the URL): `Difficulty=0` → the human pawn logs `Skill 1.0`, `Difficulty=5` →
+`Skill 3.0`. That is `PlayerPawn.PreBeginPlay`'s `Skill += Level.Game.Difficulty`
+(`Skill` is documented as "scaled by game difficulty"), so the ini key really does
+set the game's difficulty. Bot pawns are the confusing part: their default `Skill`
+is already 3 and the value is clamped to 0..3, so a low ini difficulty does not show
+up as a lower logged `Skill` — what changes is the novice flag and the per-bot
+`BotSkills[n]` spread. Judge `--skill` in play (or with the game's own difficulty
+menu), not by the logged number.
+
+Bot timing, straight from `DeathMatchPlus.Timer()`: the server never fills
+bots before a human is present. Once someone joins it waits `NetWait` seconds
+(default 10) and then adds one bot per second until `NumPlayers + NumBots`
+reaches `MinPlayers`. So expect the first bot ~12 s after your join — not at
+server start.
 
 ### Networking options
 
@@ -93,6 +142,7 @@ Mode mapping: `ctf`→`Botpack.CTFGame`, `dm`→`Botpack.DeathMatchPlus`,
 | `--host-port N`  | client          | Host bridge's TCP port it dials (default 8777) |
 | `--tc-key NAME`  | server/bridge/client | Saved tailcat key for a stable `tcp...` address |
 | `--join HOST:PORT`| client         | Explicit join target                           |
+| `--name NAME`    | client          | Player name → `[DefaultPlayer] Name` in `User.ini`; default: random `Player-XXXX` (engine limit: 16 chars) |
 | `--no-join`      | client          | Start at main menu instead of auto-joining     |
 | `--xvfb` / `--no-xvfb` | client   | Force/forbid Xvfb; default: automatic when `DISPLAY` is unset |
 | `--xvfb-res WxH` | client          | Xvfb screen size (default `2560x1440`, see [Headless](#headless--xvfb)) |
@@ -122,6 +172,8 @@ system wine):
 | `DISABLE_UPLINKS`     | `1`                                           | Comment out master-server uplink lines (backup kept as `*.ut99bak`) |
 | `UT99_PACK_OUT`       | `files/ut99-wineprefix.tgz`                   | Pack output path; suffix picks compression |
 | `UT99_PACK_KEEP`      | *(empty)*                                     | Re-include named pack excludes, e.g. `mono,UT436` |
+| `UT99_PACK_SCRUB_TO`  | `Player`                                      | Name written into the packed `User.ini`; `''` disables name scrubbing |
+| `UT99_SERVE_DIR`      | `files/`                                      | Directory served by `ut99 serve` / `host-serve-files.sh` |
 | `UT99_PREFIX_TGZ`     | `files/ut99-wineprefix.tgz`                   | Tarball to deploy                     |
 | `UT99_DEPLOY_FORCE`   | `0`                                           | `1` = allow extracting over a non-empty prefix |
 
@@ -145,9 +197,26 @@ own `WINEPREFIX` and can immediately run everything.
 
 ```sh
 ./ut99 pack          # -> files/ut99-wineprefix.tgz (+ .sha256), ~560M
-# share the tgz + .sha256 (scp, file host, python3 -m http.server …)
-./ut99 deploy        # friend side: verifies checksum, extracts into WINEPREFIX
+./ut99 serve         # serves both files read-only over tailcat; copy its tcp... address
+
+# friend side (in their own clone/copy of this repo):
+tailcat cp <tcp...>:ut99-wineprefix.tgz .        # scp-like fetch with progress
+tailcat cp <tcp...>:ut99-wineprefix.tgz.sha256 .
+./ut99 deploy        # verifies the checksum, extracts into WINEPREFIX
 ```
+
+`ut99 serve` is tailcat's built-in SFTP-style file service rooted at `files/`
+(read-only); plain `scp`, `sftp`, a file host or `python3 -m http.server`
+work just as well if you prefer to move the two files another way.
+
+The pack scrubs your personal player name: inside the archive `User.ini`'s
+`[DefaultPlayer] Name` becomes `Player` and `BestPlayers[]`/`Saves[]` entries
+referencing your name are dropped, while key bindings, video/audio settings
+and everything else are carried over byte-identically. Your live `User.ini`
+is never touched, and the original name never enters the archive (the real
+file is excluded and only the scrubbed copy is packed). Set
+`UT99_PACK_SCRUB_TO=''` to pack the name as-is. Friends change it later with
+`ut99 client --name <their name>`.
 
 The raw prefix is ~1.8G; the pack drops things the game never uses or
 regenerates: `windows/mono` (~228M), `drive_c/UT436` leftover copy (~100M),
@@ -183,7 +252,13 @@ unset (ssh sessions, CI). Notes learned the hard way:
   (`tailcat ping <tcp...>` shows direct vs DERP path).
 - **Client auto-join**: `ut99 client` auto-joins `127.0.0.1:$UT_UDP_PORT`
   a few seconds after launch, *while the intro movies play*. Verified on this
-  469 install with the full tunnel. If it lands on the main menu instead,
+  469 install with the full tunnel. While a connect attempt is pending the
+  intro **loops** — `CityIntro` keeps replaying until the connection lands or
+  the engine's ~150 s connect timeout fires. A client stuck looping the intro
+  forever therefore means the connect never succeeded: check start order and
+  ports (below), especially that both bridge sides agree on the *host* bridge
+  port (`--bridge-port` is your local TCP port; the side dialing the host must
+  match its port via `--host-port`). If it lands on the main menu instead,
   almost always nothing was listening on the local UDP port yet — start in
   order: server → host bridge → client bridge → game (the wrapper does this
   for you and waits for the bridge). In-game fallback: **Multiplayer → Join
@@ -193,6 +268,25 @@ unset (ssh sessions, CI). Notes learned the hard way:
   (server browser) — don't let a loopback client bridge reuse either port.
   Working loopback split: server `7777`/bridge `8777` (defaults), client
   `--port 7779 --bridge-port 9777`.
+- **Verify who is really in the game** (humans and bots): the server writes a
+  UTF-16 world log to `UnrealTournament/Logs/Unreal.ngLog.<date>.<port>.log`
+  (`.tmp` while running / after a hard kill). It is authoritative, unlike the
+  console, which only prints `Possessed PlayerPawn` for humans:
+
+  ```sh
+  L=$(ls -t "$UT_DIR/../Logs/Unreal.ngLog."* | head -1)
+  iconv -f UTF-16LE -t UTF-8 "$L" | tr -d '\r' \
+    | grep -E 'player\s(Connect|IsABot|Skill|Score)'
+  # 16.91 player Connect SpaceGaucho 0 False   <- you
+  # 28.59 player Connect Archon      1 False   \
+  # 28.59 player IsABot  1 True                 /  three bots, Skill 3
+  ```
+
+  No bots at all? Check `MinPlayers` in the game type's ini section (see
+  [Why --bots/--goal/--time are written into the ini](#why---botsgoaltime-are-written-into-the-ini)).
+  Bots that feel the same difficulty no matter what `--skill` does? That is normal
+  in the logged numbers (bot pawns default to `Skill 3` and the value is clamped);
+  the ini key drives the novice flag instead. See the `--skill` note above.
 - **Recovery prompt after a hard kill**: 469 tracks clean exits through an
   empty `System/Running.ini` marker. If a game was SIGKILLed, the next launch
   asks how to start (normal/safe mode). Delete `Running.ini` to skip it; the
