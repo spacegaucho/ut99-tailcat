@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ut99 — single wrapper for the whole project: dedicated server, game client,
-# tailcat/socat bridges, LAN-only play, prefix packing, dependency install.
+# tailcat bridges (with the datagram-framed UDP relay in scripts/ut99-bridge.py),
+# LAN-only play, prefix packing, dependency install.
 #
 #   ut99 server  [game options] [tunnel options]   server (+ internet bridge)
 #   ut99 client  [tcp...] [tunnel options]           game (+ internet bridge)
@@ -28,11 +29,11 @@ source "$ROOT/helpers/ut99-env.sh"
 
 usage() {
   cat <<'EOF'
-ut99 — Unreal Tournament 99 over LAN or the internet (tailcat + socat)
+ut99 — Unreal Tournament 99 over LAN or the internet (tailcat + framed UDP relay)
 
 USAGE
   ut99 server  [options]        Dedicated server. Default also starts the
-                                tailcat/socat host bridge and prints the tcp...
+                                tailcat host bridge and prints the tcp...
                                 address; the host player joins with `ut99 client`.
   ut99 client  [tcp...] [opts]   Game client. With a tcp... address it starts the
                                 client bridge first, waits until the tunnel is
@@ -511,7 +512,7 @@ ut99 file-serve [DIR] [--dir DIR] [--tc-key NAME]
   transferring). Nothing is served until this command runs.
 
   Friend side (their own clone/copy of this repo, on their machine):
-    ./ut99 deps                                   # installs tailcat + socat
+    ./ut99 deps                                   # installs tailcat
     mkdir -p files
     tailcat cp <tcp...>:ut99-wineprefix.tgz files/
     tailcat cp <tcp...>:ut99-wineprefix.tgz.sha256 files/

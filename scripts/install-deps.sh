@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # install-deps.sh — install what ut99-socat-tailcat needs:
-#   * socat   (Arch Linux: via pacman; other distros: manual, with a hint)
 #   * tailcat (latest linux binary from the GitHub release, verified with sha256)
+#   * python3 (runs the datagram-framed UDP<->TCP relay, scripts/ut99-bridge.py)
 #
 # tailcat is installed to ~/.local/bin (set INSTALL_BIN_DIR to change,
 # FORCE_UPDATE=1 to re-download even if tailcat is already present).
@@ -12,15 +12,15 @@ FORCE_UPDATE="${FORCE_UPDATE:-0}"
 
 err() { echo "install-deps: $*" >&2; }
 
-# --- socat ---
-if command -v socat >/dev/null 2>&1; then
-  echo "socat: already installed ($(command -v socat))"
+# --- python3 (bridge relay) ---
+if command -v python3 >/dev/null 2>&1; then
+  echo "python3: already installed ($(command -v python3))"
 elif command -v pacman >/dev/null 2>&1; then
-  echo "Installing socat via pacman (needs sudo)..."
-  sudo pacman -S --noconfirm --needed socat
+  echo "Installing python via pacman (needs sudo)..."
+  sudo pacman -S --noconfirm --needed python
 else
-  err "socat is missing and pacman was not found."
-  err "Install it with your distro's package manager (Debian/Ubuntu: apt install socat, Fedora: dnf install socat)."
+  err "python3 is missing and pacman was not found."
+  err "Install it with your distro's package manager (Debian/Ubuntu: apt install python3, Fedora: dnf install python3)."
   exit 1
 fi
 

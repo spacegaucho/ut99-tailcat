@@ -34,7 +34,7 @@ echo "Serving $DIR (read-only) via tailcat's files service."
 echo "Copy the 'tcp...' address printed below and give it to your friends."
 echo
 echo "Friend side, in their own clone/copy of this repo (fetch + verify + deploy):"
-echo "  ./ut99 deps                        # installs tailcat + socat if missing"
+echo "  ./ut99 deps                        # installs tailcat if missing"
 echo "  mkdir -p files"
 echo "  tailcat cp <tcp...>:ut99-wineprefix.tgz files/"
 echo "  tailcat cp <tcp...>:ut99-wineprefix.tgz.sha256 files/"

@@ -2,3 +2,6 @@
 files/ut99-wineprefix.tgz
 files/ut99-wineprefix.tgz.sha256
 files/ut99-wineprefix*.tar.*
+
+# python bytecode from scripts/ut99-bridge.py
+__pycache__/

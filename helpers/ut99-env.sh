@@ -19,7 +19,7 @@ export WINE_BIN="${WINE_BIN:-wine}"
 
 # --- Ports ------------------------------------------------------------------
 export UT_UDP_PORT="${UT_UDP_PORT:-7777}"           # UT99 server & client port (UDP)
-export BRIDGE_TCP_PORT="${BRIDGE_TCP_PORT:-8777}"   # local TCP port of the socat<->tailcat bridge
+export BRIDGE_TCP_PORT="${BRIDGE_TCP_PORT:-8777}"   # local TCP port of the relay<->tailcat bridge
 # Port the HOST's tailcat serves. Defaults to the standard 8777, NOT to
 # BRIDGE_TCP_PORT: on a loopback test the client overrides its *local*
 # BRIDGE_TCP_PORT (e.g. 9777) but the host still serves 8777.

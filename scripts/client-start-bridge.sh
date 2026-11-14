@@ -2,8 +2,12 @@
 # client-start-bridge.sh — client side of the tailcat bridge.
 #
 # Chain (client side):
-#   UT99 client --UDP 127.0.0.1:7777--> socat --TCP 127.0.0.1:8777--> tailcat forward
-#     ...tailcat tunnel...--> host's tailcat serve 8777 --> host's socat --> host's UT99 server
+#   UT99 client --UDP 127.0.0.1:7777/7778--> ut99-bridge.py relay --TCP 127.0.0.1:8777--> tailcat forward
+#     ...tailcat tunnel...--> host's tailcat serve 8777 --> host's relay --> host's UT99 server
+#
+# The relay frames every UDP datagram before it crosses the TCP tunnel;
+# a raw byte-stream bridge (e.g. plain socat) merges packet bursts into
+# giant datagrams and corrupts the game. See scripts/ut99-bridge.py.
 #
 # Usage: ./client-start-bridge.sh <tc-address>
 #   or:  TC_ADDR=tcpXXXX ./client-start-bridge.sh
@@ -19,7 +23,7 @@ if [ -z "$TC_ADDR" ]; then
   exit 1
 fi
 
-require_cmd socat tailcat || exit 1
+require_cmd python3 tailcat || exit 1
 start_job_trap
 
 echo "tailcat: forwarding local TCP 127.0.0.1:${BRIDGE_TCP_PORT} -> host port ${HOST_BRIDGE_TCP_PORT}"
@@ -40,8 +44,9 @@ if [ "$ready" != "1" ]; then
   exit 1
 fi
 
-echo "socat: UDP 127.0.0.1:${UT_UDP_PORT} -> TCP 127.0.0.1:${BRIDGE_TCP_PORT}"
-socat "UDP-LISTEN:${UT_UDP_PORT},reuseaddr,fork,bind=127.0.0.1" "TCP:127.0.0.1:${BRIDGE_TCP_PORT}" &
+echo "relay: UDP 127.0.0.1:${UT_UDP_PORT} +$((UT_UDP_PORT + 1)) -> TCP 127.0.0.1:${BRIDGE_TCP_PORT} (framed)"
+python3 "$SCRIPT_DIR/ut99-bridge.py" client \
+  --udp-port "$UT_UDP_PORT" --tcp-host 127.0.0.1 --tcp-port "$BRIDGE_TCP_PORT" &
 
 echo "Bridge ready. In UT99: Multiplayer > Join Game > Open Game > 127.0.0.1:${UT_UDP_PORT}"
 echo "Press Ctrl+C to disconnect."

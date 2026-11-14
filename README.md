@@ -2,15 +2,18 @@
 
 Play an Unreal Tournament 99 (GOTY) LAN game across the internet using
 [tailcat](https://github.com/tailscale/tailcat) (WireGuard-encrypted
-point-to-point tunnel via DERP, no accounts/ports/VPN setup) bridged with
-socat, because tailcat's forwarded ports are TCP-only while UT99 speaks UDP
-(tailcat's separate built-in file service is the one exception — used by
-`ut99 file-serve` to share the game pack):
+point-to-point tunnel via DERP, no accounts/ports/VPN setup) bridged with the
+included datagram-framed UDP↔TCP relay (`scripts/ut99-bridge.py`), because
+tailcat's forwarded ports are TCP-only while UT99 speaks UDP (tailcat's
+separate built-in file service is the one exception — used by `ut99
+file-serve` to share the game pack). The name is historical: socat was the
+original bridge; the relay replaced it because raw byte-stream bridging
+corrupts the game — see [Caveats](#caveats--troubleshooting):
 
 ```
-UT99 client --UDP :7777--> socat --TCP :8777--> tailcat forward
+UT99 client --UDP :7777/7778--> ut99-bridge.py --TCP :8777--> tailcat forward
    ═══════════ WireGuard-encrypted tailcat tunnel ═══════════
-host: tailcat serve :8777 <--TCP-- socat --UDP 127.0.0.1:7777--> UCC dedicated server
+host: tailcat serve :8777 <--TCP-- ut99-bridge.py --UDP 127.0.0.1:7777/7778--> UCC dedicated server
 ```
 
 One host runs the server + bridge and shares its `tcp...` address; each friend
@@ -23,14 +26,15 @@ default (dead once the host stops), stable if you generate a saved key.
 ut99                    single wrapper: server / client / bridge / probe / pack / deploy / file-serve / file-pull / deps
 scripts/                engine scripts (all usable standalone, wrapper just drives them)
   host-start-server.sh          UCC dedicated server (Lutris wine install)
-  host-start-bridge.sh          tailcat serve + socat TCP→UDP, prints the tcp... address
-  client-start-bridge.sh        tailcat forward + socat UDP→TCP (takes the tcp... address)
+  host-start-bridge.sh          tailcat serve + framed UDP relay, prints the tcp... address
+  client-start-bridge.sh        tailcat forward + framed UDP relay (takes the tcp... address)
+  ut99-bridge.py                the relay itself: length-prefixed UDP<->TCP datagram framing
   client-start-ut99.sh          game client with auto-join
   host-pack-prefix.sh           pack the wine prefix into files/ut99-wineprefix.tgz (+ .sha256)
   client-deploy-prefix.sh       friend side: verify + extract the tarball
   host-serve-files.sh           tailcat file service (`ut99 file-serve`): share the tarball + .sha256
   client-pull-files.sh          client side (`ut99 file-pull`): fetch + verify the tarball
-  install-deps.sh               socat (pacman/apt) + tailcat (GitHub release, sha256-checked)
+  install-deps.sh               tailcat (GitHub release, sha256-checked) + python3 check
 helpers/ut99-env.sh     shared config (every value overridable via environment)
 files/                  pack output (gitignored)
 ```
@@ -38,7 +42,7 @@ files/                  pack output (gitignored)
 ## Quick start
 
 ```sh
-./ut99 deps                     # socat + tailcat, only if missing
+./ut99 deps                     # tailcat + python3, only if missing
 
 # Host (one terminal): starts server AND bridge, prints the tcp... address
 ./ut99 server --mode instagib --bots 4
@@ -67,7 +71,7 @@ LAN-only play: `./ut99 server --lan`, clients join `host-ip:7777`.
 | `ut99 deploy`   | Verify + extract the tarball into `WINEPREFIX`.                    |
 | `ut99 file-serve [DIR]` | Serve `DIR` (default `files/`) read-only through tailcat's file service; friends fetch with `tailcat cp`. |
 | `ut99 file-pull <tcp...>` | Client side of `file-serve`: fetch the tarball + `.sha256` into `files/` and verify (skips the download when the local copy already matches). |
-| `ut99 deps`     | Install socat + tailcat if missing.                                |
+| `ut99 deps`     | Install tailcat + python3 if missing.                              |
 | `ut99 --completion bash` | Print the bash completion script — see [Shell completion](#shell-completion). |
 
 ### Server game options
@@ -141,7 +145,7 @@ server start.
 |------------------|-----------------|------------------------------------------------|
 | `--lan`          | server/client   | No bridges; plain LAN on UDP `--port`          |
 | `--port N`       | server/client   | UT UDP port (server default 7777; also sets the join URL `?port=` so UCC rebinds) |
-| `--bridge-port N`| both            | Local TCP port of the socat↔tailcat bridge (default 8777) |
+| `--bridge-port N`| both            | Local TCP port of the relay↔tailcat bridge (default 8777) |
 | `--host-port N`  | client          | Host bridge's TCP port it dials (default 8777) |
 | `--tc-key NAME`  | server/bridge/client | Saved tailcat key for a stable `tcp...` address |
 | `--join HOST:PORT`| client         | Explicit join target                           |
@@ -164,7 +168,7 @@ system wine):
 | `UT_DIR`              | `$WINEPREFIX/drive_c/UnrealTournament/System` | Game `System` dir (UCC.exe lives here) |
 | `WINE_BIN`            | `wine`                                        | Wine binary to use                   |
 | `UT_UDP_PORT`         | `7777`                                        | UT99 server/client UDP port          |
-| `BRIDGE_TCP_PORT`     | `8777`                                        | local socat↔tailcat TCP port (both sides) |
+| `BRIDGE_TCP_PORT`     | `8777`                                        | local relay↔tailcat TCP port (both sides) |
 | `HOST_BRIDGE_TCP_PORT`| `8777`                                        | Host's bridge port (client-side override) |
 | `TC_ADDR`             | —                                             | Host's tailcat address (client side) |
 | `TAILCAT_KEY`         | *(empty)*                                     | Saved key name for a stable `tcp...` address |
@@ -209,7 +213,7 @@ Getting the files on the client side (what each friend runs):
 
 ```sh
 # friend side, in their own clone/copy of this repo (ut99, scripts/, helpers/)
-./ut99 deps                                        # installs tailcat + socat if missing
+./ut99 deps                                        # installs tailcat if missing
 ./ut99 file-pull <file-serve tcp... address>       # -> files/, checksum verified
 ./ut99 deploy                                      # extracts into WINEPREFIX
 ./ut99 client <host's bridge tcp... address>       # then play
@@ -268,7 +272,7 @@ MSI caches (~80M), wine-gecko `INetCache` (~83M), game `Installer`/`GLCache`/
 `UT99_PACK_KEEP=mono,UT436`; choose output with `--out`. `deploy` refuses to
 touch a non-empty prefix unless `--force`. The prefix was created with wine
 11.x — friends should use a similarly recent wine (≥ 9). Deploying does not
-install `tailcat`/`socat`: run `./ut99 deps` too.
+install `tailcat`: run `./ut99 deps` too.
 
 ## Headless / Xvfb
 
@@ -310,28 +314,55 @@ errors; a zsh user can wrap this with bashcompinit).
 
 ## Caveats & troubleshooting
 
-- **UDP over TCP loses datagram boundaries.** socat streams bytes into the
-  tailcat TCP tunnel; small UT99 datagrams can merge or split across the hop
-  and get dropped by the game. Reliable traffic retransmits, so it usually
-  plays fine; for stutter/packet loss try a datagram-framing tool (e.g.
-  `udptunnel`) in place of socat on both sides, or host closer to your friends
-  (`tailcat ping <tcp...>` shows direct vs DERP path).
+- **Datagram boundaries are the whole game (why a relay, not socat).** tailcat
+  carries TCP byte streams; UT99 speaks UDP. The original socat bridge
+  (`TCP-LISTEN ...,fork <-> UDP:...`) treats that stream as opaque bytes: when
+  the game bursts packets each tick, TCP coalesces the burst into one `read`,
+  and the bridge fires the merged blob at the server as **one giant UDP
+  datagram**. UT99 then misparses the stream and the log fills with
+  `Forged object`, `Received unwanted function`, `Recovered from extra data
+  received after socket close`, `NotifyAcceptingChannel …: Refused`, and
+  `corrupted packet … Disconnecting`; a session can grind or the server can
+  die outright (its `UCC.log` ends mid-line, no `Log file closed`). Once the
+  server is gone the bridge starts spamming `read(5, …): Connection refused`
+  — that error is the **symptom**, check the server log first.
+  `scripts/ut99-bridge.py` replaced socat on both sides: every datagram gets a
+  `TYPE(1B)|LEN(2B)|payload` frame, so TCP coalescing can no longer merge
+  them. Measured: a tight burst of 40 datagrams came out of the old chain as 4
+  merged blobs; through the relay all 40 arrive intact, game and query
+  channels separate, one relay session per client socket. (This socat build
+  also lacks its `TUNNEL:` framing addresses, which would have been the
+  built-in equivalent.)
+- **Diagnosing a broken session** (469 writes `UCC.log` / `ut99-client.log` as
+  UTF-8 with BOM + CRLF):
+  `grep -aE 'Forged object|unwanted function|extra data|Refused|corrupted packet|timed out' "$UT_DIR/UCC.log" | sort | uniq -c`
+  — a healthy bridged session produces **none** of these. A lone
+  `extra data received after socket close` right after a client quit is
+  normal engine noise.
 - **Client auto-join**: `ut99 client` auto-joins `127.0.0.1:$UT_UDP_PORT`
   a few seconds after launch, *while the intro movies play*. Verified on this
   469 install with the full tunnel. While a connect attempt is pending the
   intro **loops** — `CityIntro` keeps replaying until the connection lands or
   the engine's ~150 s connect timeout fires. A client stuck looping the intro
-  forever therefore means the connect never succeeded: check start order and
-  ports (below), especially that both bridge sides agree on the *host* bridge
-  port (`--bridge-port` is your local TCP port; the side dialing the host must
-  match its port via `--host-port`). If it lands on the main menu instead,
-  almost always nothing was listening on the local UDP port yet — start in
-  order: server → host bridge → client bridge → game (the wrapper does this
-  for you and waits for the bridge). In-game fallback: **Multiplayer → Join
-  Game → Open Game** → `127.0.0.1:7777`. There is no `-nointro` on 469.
+  therefore means the connect never landed: a stalled handshake (old
+  byte-stream bridges produced exactly that — see the relay bullet above), a
+  wrong port agreement (`--bridge-port` is your local TCP port; the side
+  dialing the host must match its port via `--host-port`), or nothing
+  listening on the local UDP port yet — start in order: server → host bridge
+  → client bridge → game (the wrapper does this for you and waits for the
+  bridge). After the 150 s timeout the client falls back to the menu/browser,
+  which looks like a second, spontaneous re-join. If the connect stalls
+  **mid-game** and then the intro loops again, the server likely died
+  (check `UCC.log`, bullet above). In-game fallback: **Multiplayer → Join
+  Game → Open Game** → `127.0.0.1:7777` (or your `--port`). There is no
+  `-nointro` on 469.
 - **`?port=` URLs work on 469**: `ut99 server --port N` appends `?port=N` so
   UCC binds N. The server also binds **N+1** (UDP) for `UdpServerQuery`
-  (server browser) — don't let a loopback client bridge reuse either port.
+  (server-browser queries). The client relay binds `N+1` too and routes it to
+  the *server's* query port through the tunnel, so a query probe to
+  `127.0.0.1:7780` reaches a server on `7777`/`7778` even when your client
+  uses split ports (e.g. `--port 7779`, join URL `127.0.0.1:7779`). Just
+  don't let a loopback client bridge reuse the server's own `7777`/`7778`.
   Working loopback split: server `7777`/bridge `8777` (defaults), client
   `--port 7779 --bridge-port 9777`.
 - **Verify who is really in the game** (humans and bots): the server writes a
