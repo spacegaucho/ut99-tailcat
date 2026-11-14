@@ -47,15 +47,18 @@ files/                  pack output (gitignored)
 # Host (one terminal): starts server AND bridge, prints the tcp... address
 ./ut99 server --mode instagib --bots 4
 
-# [optional, once per new friend] friend has no game install yet:
-./ut99 pack                     # [optional] host: -> files/ut99-wineprefix.tgz (+ .sha256)
-./ut99 file-serve               # [optional] host, own terminal (alongside the server):
-                                #            prints a SECOND tcp... address, for the files
+# [optional, once per new friend] host side: friend has no game install yet,
+# so the host serves them the game files (file-serve gets its own terminal,
+# alongside the server):
+./ut99 pack                     # -> files/ut99-wineprefix.tgz (+ .sha256)
+./ut99 file-serve               # prints a SECOND tcp... address, for the files
+
+# [optional, once per new friend] client side, on the friend's machine:
 ./ut99 file-pull <file-serve tcp... address> --deploy
-                                # [optional] friend: fetch + unpack into their WINEPREFIX
+                                # fetch + unpack into their WINEPREFIX
 
 # Each friend (one terminal): bridge + game in one command
-./ut99 client tcpGFwWCDL...     # the address the host printed
+./ut99 client tcpGFwWCDL...     # the address the host's server printed
                                 # [optional] --name Archon (player name, max 16 chars)
 
 # Host player's own game (second terminal)
