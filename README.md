@@ -8,7 +8,7 @@ tailcat's forwarded ports are TCP-only while UT99 speaks UDP (tailcat's
 separate built-in file service is the one exception — used by `ut99
 file-serve` to share the game pack). The name is historical: socat was the
 original bridge; the relay replaced it because raw byte-stream bridging
-corrupts the game — see [Caveats](#caveats--troubleshooting):
+corrupts the game — see [troubleshooting](docs/troubleshooting.md):
 
 ```
 UT99 client --UDP :7777/7778--> ut99-bridge.py --TCP :8777--> tailcat forward
@@ -36,6 +36,7 @@ scripts/                engine scripts (all usable standalone, wrapper just driv
   client-pull-files.sh          client side (`ut99 file-pull`): fetch + verify the tarball
   install-deps.sh               tailcat (GitHub release, sha256-checked) + python3 install, wine check
 helpers/ut99-env.sh     shared config (every value overridable via environment)
+docs/                   advanced docs: ini options, environment variables, file sharing, headless, completion, troubleshooting
 files/                  pack output (gitignored)
 ```
 
@@ -83,7 +84,7 @@ LAN-only play: `./ut99 server --lan`, clients join `host-ip:7777`.
 (the engine takes it from there into the join URL); omit it and the wrapper
 picks a throwaway random `Player-XXXX`. Engine limit: 16 characters.
 The `file-serve` address and the `server` bridge address are two different
-`tcp...` strings; details in *Sharing the game install* below.
+`tcp...` strings; details in [docs/sharing-files.md](docs/sharing-files.md).
 
 ## `ut99` commands
 
@@ -98,7 +99,7 @@ The `file-serve` address and the `server` bridge address are two different
 | `ut99 file-serve [DIR]` | Serve `DIR` (default `files/`) read-only through tailcat's file service; friends fetch with `tailcat cp`. |
 | `ut99 file-pull <tcp...>` | Client side of `file-serve`: fetch the tarball + `.sha256` into `files/` and verify (skips the download when the local copy already matches). |
 | `ut99 deps`     | Install tailcat + python3 if missing; check wine (prints per-distro install hints when absent). |
-| `ut99 --completion bash` | Print the bash completion script — see [Shell completion](#shell-completion). |
+| `ut99 --completion bash` | Print the bash completion script — see [docs/completion.md](docs/completion.md). |
 
 ### Server game options
 
@@ -113,7 +114,7 @@ The `file-serve` address and the `server` bridge address are two different
 | `--skill 0-7`       | Game/bot difficulty → `[Botpack.ChallengeBotInfo] Difficulty` (0-3 novice, 4-7 not, default 3) |
 | `--goal N`          | `GoalScore` (default 5)                             |
 | `--time MIN`        | `TimeLimit` in minutes (default 15)                 |
-| `--no-ini`          | Don't write those three into `UnrealTournament.ini` (see below) |
+| `--no-ini`          | Don't write those three into `UnrealTournament.ini` (see [docs/ini-options.md](docs/ini-options.md)) |
 | `--opts RAW`        | Full raw URL options, overrides all assembly above (and skips the ini writes) |
 | `--keep-uplinks`    | Do NOT comment out master-server uplink lines       |
 
@@ -121,49 +122,8 @@ Mode mapping: `ctf`→`Botpack.CTFGame`, `dm`→`Botpack.DeathMatchPlus`,
 `instagib`→`Botpack.DeathMatchPlus` + `Botpack.InstaGibDM` mutator,
 `team`→`Botpack.TeamGamePlus`, `dom`→`Botpack.Domination`.
 
-#### Why `--bots`/`--goal`/`--time` are written into the ini
-
-`MinPlayers`, `GoalScore` and `TimeLimit` are declared `var() globalconfig` in
-the game classes (`System/Botpack.u`, shipped source on 469), so the engine
-reads them from **`UnrealTournament.ini`**, and a `?MinPlayers=4` URL option is
-silently ignored — a server whose ini says `MinPlayers=0` stays bot-free no
-matter what the URL says. So `ut99 server` writes them into the game type's own
-ini section before launching UCC:
-
-```ini
-[Botpack.CTFGame]
-MinPlayers=4      # total players: you + 3 bots
-GoalScore=5
-TimeLimit=15
-```
-
-`ini_set` replaces the key in place (or adds it), keeps CRLF line endings and
-touches nothing else; `--no-ini` (or `--opts RAW`) leaves your ini alone, and
-then those numbers have to come from the ini itself.
-
-`--skill` has the same trap from the other side. `TournamentGameInfo.SpawnBot()`
-begins with `Difficulty = BotConfig.Difficulty;`, i.e. it *overwrites* the game's
-`Difficulty` (a plain `var byte` in `Engine.GameInfo`, so `?Difficulty=` in the URL
-is only read once in `InitGame` and then overwritten) with
-`[Botpack.ChallengeBotInfo] Difficulty` from the ini — again a `config` key.
-Values 0..3 are the four skill levels in novice mode, 4..7 the same levels with
-novice mode off, and `InitializeSkill` also sets the bot's `bNovice` flag from it.
-
-Measured on this install (ini-only run, `InitGame` line proves no `?Difficulty=` was
-in the URL): `Difficulty=0` → the human pawn logs `Skill 1.0`, `Difficulty=5` →
-`Skill 3.0`. That is `PlayerPawn.PreBeginPlay`'s `Skill += Level.Game.Difficulty`
-(`Skill` is documented as "scaled by game difficulty"), so the ini key really does
-set the game's difficulty. Bot pawns are the confusing part: their default `Skill`
-is already 3 and the value is clamped to 0..3, so a low ini difficulty does not show
-up as a lower logged `Skill` — what changes is the novice flag and the per-bot
-`BotSkills[n]` spread. Judge `--skill` in play (or with the game's own difficulty
-menu), not by the logged number.
-
-Bot timing, straight from `DeathMatchPlus.Timer()`: the server never fills
-bots before a human is present. Once someone joins it waits `NetWait` seconds
-(default 10) and then adds one bot per second until `NumPlayers + NumBots`
-reaches `MinPlayers`. So expect the first bot ~12 s after your join — not at
-server start.
+Why `--bots`/`--goal`/`--time` go through the ini, how `--skill` actually
+reaches the bots, and when bots spawn: [docs/ini-options.md](docs/ini-options.md).
 
 ### Networking options
 
@@ -178,38 +138,13 @@ server start.
 | `--name NAME`    | client          | Player name → `[DefaultPlayer] Name` in `User.ini`; default: random `Player-XXXX` (engine limit: 16 chars) |
 | `--no-join`      | client          | Start at main menu instead of auto-joining     |
 | `--xvfb` / `--no-xvfb` | client   | Force/forbid Xvfb; default: automatic when `DISPLAY` is unset |
-| `--xvfb-res WxH` | client          | Xvfb screen size (default `2560x1440`, see [Headless](#headless--xvfb)) |
+| `--xvfb-res WxH` | client          | Xvfb screen size (default `2560x1440`, see [docs/headless.md](docs/headless.md)) |
 | `--prefix DIR`, `--wine-bin PATH` | server/client | `WINEPREFIX` / wine binary overrides |
 | `-- ARGS`        | client          | Passed to the game untouched                   |
 
-## Engine environment variables
-
-The wrapper maps flags onto these; when using `scripts/` directly, set them
-yourself. Defaults match the Lutris `unreal-tournament` install (wine runner,
-system wine):
-
-| Variable              | Default                                       | Meaning                              |
-|-----------------------|-----------------------------------------------|--------------------------------------|
-| `WINEPREFIX`          | `~/wine/unreal-tournament`                    | Lutris wine prefix of the game       |
-| `UT_DIR`              | `$WINEPREFIX/drive_c/UnrealTournament/System` | Game `System` dir (UCC.exe lives here) |
-| `WINE_BIN`            | `wine`                                        | Wine binary to use                   |
-| `UT_UDP_PORT`         | `7777`                                        | UT99 server/client UDP port          |
-| `BRIDGE_TCP_PORT`     | `8777`                                        | local relay↔tailcat TCP port (both sides) |
-| `HOST_BRIDGE_TCP_PORT`| `8777`                                        | Host's bridge port (client-side override) |
-| `TC_ADDR`             | —                                             | Host's tailcat address (client side) |
-| `TAILCAT_KEY`         | *(empty)*                                     | Saved key name for a stable `tcp...` address |
-| `MAP` / `GAME_TYPE` / `EXTRA_OPTS` | `CTF-Face` / `Botpack.CTFGame` / see server flags | Raw server URL settings |
-| `UT_AUTOJOIN`         | `1`                                           | `0` = client starts at main menu     |
-| `UT99_LOG`            | `1`                                           | Client writes UT engine log `ut99-client.log` in `UT_DIR` (`-log … -forcelogflush`) |
-| `UT99_XVFB_RES`       | `2560x1440`                                   | Xvfb screen size used by `ut99 client` |
-| `DISABLE_UPLINKS`     | `1`                                           | Comment out master-server uplink lines (backup kept as `*.ut99bak`) |
-| `UT99_PACK_OUT`       | `files/ut99-wineprefix.tgz`                   | Pack output path; suffix picks compression |
-| `UT99_PACK_KEEP`      | *(empty)*                                     | Re-include named pack excludes, e.g. `mono,UT436` |
-| `UT99_PACK_SCRUB_TO`  | `Player`                                      | Name written into the packed `User.ini`; `''` disables name scrubbing |
-| `UT99_FILE_SERVE_DIR` | `files/`                                      | Directory served by `ut99 file-serve` / `host-serve-files.sh` |
-| `UT99_FILE_PULL_DIR` | `files/`                                       | Directory `ut99 file-pull` fetches into |
-| `UT99_PREFIX_TGZ`     | `files/ut99-wineprefix.tgz`                   | Tarball to deploy                     |
-| `UT99_DEPLOY_FORCE`   | `0`                                           | `1` = allow extracting over a non-empty prefix |
+The flags map onto environment variables (`WINEPREFIX`, `UT_UDP_PORT`,
+`UT99_PACK_OUT`, …) understood by every script — full table with defaults in
+[docs/environment.md](docs/environment.md).
 
 ## Stable address (recommended)
 
@@ -223,243 +158,13 @@ tailcat genkey --key ut99        # once; prints the stable tcp... address,
 ./ut99 client <that address> --tc-key ut99
 ```
 
-## Sharing the game install (one-time setup for friends)
+## Documentation
 
-Instead of each friend installing and patching UT99 themselves, pack your
-working Lutris wine prefix into a single tarball; they extract it into their
-own `WINEPREFIX` and can immediately run everything.
-
-```sh
-# host side
-./ut99 pack          # -> files/ut99-wineprefix.tgz (+ .sha256), ~560M
-./ut99 file-serve    # serves both files read-only over tailcat; copy its tcp... address
-```
-
-Getting the files on the client side (what each friend runs):
-
-```sh
-# friend side, in their own clone/copy of this repo (ut99, scripts/, helpers/)
-./ut99 deps                                        # installs tailcat, checks python3 + wine
-./ut99 file-pull <file-serve tcp... address>       # -> files/, checksum verified
-./ut99 deploy                                      # extracts into WINEPREFIX
-./ut99 client <host's bridge tcp... address>       # then play
-```
-
-`ut99 file-pull` is `tailcat cp` plus checksum logic: it pulls
-`ut99-wineprefix.tgz.sha256` first, **skips the download** when the local
-tarball already matches it (so re-running is cheap), transfers with scp's
-progress display, and verifies afterwards. `--force` re-downloads anyway,
-`--no-verify` skips the check, `--dir DIR` pulls somewhere else, `--deploy`
-extracts right away. The manual equivalent, if you would rather do it by hand:
-
-```sh
-mkdir -p files
-tailcat cp <tcp...>:ut99-wineprefix.tgz.sha256 files/
-tailcat cp <tcp...>:ut99-wineprefix.tgz files/     # scp-like fetch, with progress
-( cd files && sha256sum -c ut99-wineprefix.tgz.sha256 )
-```
-
-Notes for the fetching side:
-
-- **Two different addresses**: the `file-serve` address hands over the files;
-  the `server` bridge address is what `ut99 client` connects to for the game.
-  They are separate commands, separate tailcat processes, separate `tcp...`
-  strings (both only live while the host's command runs, unless `--tc-key`
-  is used).
-- Remote paths are relative to the served directory, so plain file names are
-  enough. Put both files in `files/` — that is where `ut99 deploy` looks; any
-  other location works via `UT99_PREFIX_TGZ=~/Downloads/ut99-wineprefix.tgz ./ut99 deploy`
-  (keep the `.sha256` next to the tarball).
-- Fetching only needs `tailcat` (plus the system `scp`, which is what actually
-  moves the bytes). `-p` preserves timestamps; abort with Ctrl+C and re-run to
-  retry — `scp` restarts the file from scratch rather than resuming.
-- `ut99 deploy` checks `<tarball>.sha256` itself when it is present
-  (`sha256sum -c` is the manual equivalent, run from inside the directory that
-  holds both files). It refuses a non-empty `WINEPREFIX` unless `--force`
-  (or `UT99_DEPLOY_FORCE=1`), and points at a different prefix with
-  `--prefix DIR` / `WINEPREFIX=DIR`.
-- No tailcat on the friend's machine yet, or prefer a plain download? Serve
-  the same two files any other way: `scp`, `sftp`, a file host, or on the host
-  `python3 -m http.server -d files 8000` and `curl -O` on the client side.
-
-The pack scrubs your personal player name: inside the archive `User.ini`'s
-`[DefaultPlayer] Name` becomes `Player` and `BestPlayers[]`/`Saves[]` entries
-referencing your name are dropped, while key bindings, video/audio settings
-and everything else are carried over byte-identically. Your live `User.ini`
-is never touched, and the original name never enters the archive (the real
-file is excluded and only the scrubbed copy is packed). Set
-`UT99_PACK_SCRUB_TO=''` to pack the name as-is. Friends change it later with
-`ut99 client --name <their name>`.
-
-The raw prefix is ~1.8G; the pack drops things the game never uses or
-regenerates: `windows/mono` (~228M), `drive_c/UT436` leftover copy (~100M),
-MSI caches (~80M), wine-gecko `INetCache` (~83M), game `Installer`/`GLCache`/
-`Logs`/`*.log`, and the `Running.ini` crash marker. Re-include with
-`UT99_PACK_KEEP=mono,UT436`; choose output with `--out`. `deploy` refuses to
-touch a non-empty prefix unless `--force`. The prefix was created with wine
-11.x — friends should use a similarly recent wine (≥ 9). Deploying does not
-install `tailcat`: run `./ut99 deps` too.
-
-## Headless / Xvfb
-
-`ut99 client` runs the game under `xvfb-run` automatically when `DISPLAY` is
-unset (ssh sessions, CI). Notes learned the hard way:
-
-- The Xvfb screen **must match** the game's `FullscreenViewportX/Y` in
-  `UnrealTournament.ini` (default here: 2560x1440). A mismatch makes the
-  swapchain resize mid-startup and wine dies with an `X BadWindow` error.
-  Use `--xvfb-res` to match a different ini resolution.
-- Depth is fixed at **24-bit**: this system's Xvfb refuses 32-bit screens
-  (`Couldn't add screen 0`), and a 24-bit root window maps to 32-bit D3D
-  rendering exactly like a real desktop does.
-- Headless Xvfb sessions still play game audio on your real sound device.
-- `--no-xvfb` forces your real `DISPLAY`; `UT99_XVFB_RES` overrides the size.
-
-## Shell completion
-
-Bash completion for the wrapper is generated by the wrapper itself:
-
-```sh
-source <(./ut99 --completion bash)     # try it now
-echo 'source <(/path/to/this/repo/ut99 --completion bash)' >> ~/.bashrc   # keep it
-```
-
-It is registered for both `ut99` and `./ut99` and completes:
-
-- subcommands (`ut99 <Tab>` → `server client bridge …`) and each subcommand's
-  own option set (`ut99 pack <Tab>` → `--out --keep --prefix`, no `--map`);
-- option **values**: `--mode` → `ctf dm instagib team dom`, `--keep` → the
-  pack-exclude names, `--tc-key` → the keys found in
-  `~/.config/tailcat/keys/*.private.json`, `--prefix`/`--dir` → directories,
-  `--out`/`--tgz` → files;
-- `bridge host` vs `bridge client` (each gets its own port options).
-
-Tailcat `tcp...` addresses are remote and have nothing to complete against
-locally — type or paste them. Only bash is supported (`--completion zsh`
-errors; a zsh user can wrap this with bashcompinit).
-
-## Caveats & troubleshooting
-
-- **Datagram boundaries are the whole game (why a relay, not socat).** tailcat
-  carries TCP byte streams; UT99 speaks UDP. The original socat bridge
-  (`TCP-LISTEN ...,fork <-> UDP:...`) treats that stream as opaque bytes: when
-  the game bursts packets each tick, TCP coalesces the burst into one `read`,
-  and the bridge fires the merged blob at the server as **one giant UDP
-  datagram**. UT99 then misparses the stream and the log fills with
-  `Forged object`, `Received unwanted function`, `Recovered from extra data
-  received after socket close`, `NotifyAcceptingChannel …: Refused`, and
-  `corrupted packet … Disconnecting`; a session can grind or the server can
-  die outright (its `UCC.log` ends mid-line, no `Log file closed`). Once the
-  server is gone the bridge starts spamming `read(5, …): Connection refused`
-  — that error is the **symptom**, check the server log first.
-  `scripts/ut99-bridge.py` replaced socat on both sides: every datagram gets a
-  `TYPE(1B)|LEN(2B)|payload` frame, so TCP coalescing can no longer merge
-  them. Measured: a tight burst of 40 datagrams came out of the old chain as 4
-  merged blobs; through the relay all 40 arrive intact, game and query
-  channels separate, one relay session per client socket. (This socat build
-  also lacks its `TUNNEL:` framing addresses, which would have been the
-  built-in equivalent.)
-- **Diagnosing a broken session** (469 writes `UCC.log` / `ut99-client.log` as
-  UTF-8 with BOM + CRLF):
-  `grep -aE 'Forged object|unwanted function|extra data|Refused|corrupted packet|timed out' "$UT_DIR/UCC.log" | sort | uniq -c`
-  — a healthy bridged session produces **none** of these. A lone
-  `extra data received after socket close` right after a client quit is
-  normal engine noise.
-- **Client auto-join**: `ut99 client` auto-joins `127.0.0.1:$UT_UDP_PORT`
-  a few seconds after launch, *while the intro movies play*. Verified on this
-  469 install with the full tunnel. While a connect attempt is pending the
-  intro **loops** — `CityIntro` keeps replaying until the connection lands or
-  the engine's ~150 s connect timeout fires. A client stuck looping the intro
-  therefore means the connect never landed: a stalled handshake (old
-  byte-stream bridges produced exactly that — see the relay bullet above), a
-  wrong port agreement (`--bridge-port` is your local TCP port; the side
-  dialing the host must match its port via `--host-port`), or nothing
-  listening on the local UDP port yet — start in order: server → host bridge
-  → client bridge → game (the wrapper does this for you and waits for the
-  bridge). After the 150 s timeout the client falls back to the menu/browser,
-  which looks like a second, spontaneous re-join. If the connect stalls
-  **mid-game** and then the intro loops again, the server likely died
-  (check `UCC.log`, bullet above). In-game fallback: **Multiplayer → Join
-  Game → Open Game** → `127.0.0.1:7777` (or your `--port`). There is no
-  `-nointro` on 469.
-- **`?port=` URLs work on 469**: `ut99 server --port N` appends `?port=N` so
-  UCC binds N. The server also binds **N+1** (UDP) for `UdpServerQuery`
-  (server-browser queries). The client relay binds `N+1` too and routes it to
-  the *server's* query port through the tunnel, so a query probe to
-  `127.0.0.1:7780` reaches a server on `7777`/`7778` even when your client
-  uses split ports (e.g. `--port 7779`, join URL `127.0.0.1:7779`). Just
-  don't let a loopback client bridge reuse the server's own `7777`/`7778`.
-  Working loopback split: server `7777`/bridge `8777` (defaults), client
-  `--port 7779 --bridge-port 9777`.
-- **Verify who is really in the game** (humans and bots): the server writes a
-  UTF-16 world log to `UnrealTournament/Logs/Unreal.ngLog.<date>.<port>.log`
-  (`.tmp` while running / after a hard kill). It is authoritative, unlike the
-  console, which only prints `Possessed PlayerPawn` for humans:
-
-  ```sh
-  L=$(ls -t "$UT_DIR/../Logs/Unreal.ngLog."* | head -1)
-  iconv -f UTF-16LE -t UTF-8 "$L" | tr -d '\r' \
-    | grep -E 'player\s(Connect|IsABot|Skill|Score)'
-  # 16.91 player Connect SpaceGaucho 0 False   <- you
-  # 28.59 player Connect Archon      1 False   \
-  # 28.59 player IsABot  1 True                 /  three bots, Skill 3
-  ```
-
-  No bots at all? Check `MinPlayers` in the game type's ini section (see
-  [Why --bots/--goal/--time are written into the ini](#why---botsgoaltime-are-written-into-the-ini)).
-  Bots that feel the same difficulty no matter what `--skill` does? That is normal
-  in the logged numbers (bot pawns default to `Skill 3` and the value is clamped);
-  the ini key drives the novice flag instead. See the `--skill` note above.
-- **Recovery prompt after a hard kill**: 469 tracks clean exits through an
-  empty `System/Running.ini` marker. If a game was SIGKILLed, the next launch
-  asks how to start (normal/safe mode). Delete `Running.ini` to skip it; the
-  wrapper's own teardown leaves it only for hard crashes.
-- **tailcat ignores SIGTERM** (installs SIG_IGN): anything left behind by a
-  crash can only be cleared with `pkill -KILL -x tailcat`.
-- **Windows binaries**: this install is already patched to OldUnreal **469**
-  (32-bit Windows binaries under wine: `UCC.exe`, `UnrealTournament.exe`,
-  `D3D11Drv.dll`…); no native `ucc-bin`. Server scripts use `ucc-bin`
-  automatically if a native build is installed.
-- **Friend's game dies right after launch** (`err:wgl:egl_init Failed to load
-  libEGL.so.1`, `Failed to load libGL`, `OpenGL support is disabled`, then
-  `Library d3d11.dll ... needed by D3D11Drv.dll not found`): their distro has
-  wine but not the desktop GL loader libraries, so wined3d gets no GL context
-  and 469's D3D11Drv renderer can't load. Install them — Ubuntu/Debian
-  `sudo apt install libgl1 libegl1 libgl1-mesa-dri`, Arch `sudo pacman -S
-  mesa`, Fedora `sudo dnf install mesa-libGL mesa-libEGL mesa-dri-drivers` —
-  `./ut99 deps` now checks for this. If apt answers "already the newest
-  version", what's missing is the **32-bit** copies (469 is a 32-bit process):
-  `sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install
-  libgl1:i386 libegl1:i386 libgl1-mesa-dri:i386`; confirm with
-  `ldconfig -p | grep -E 'lib(GL|EGL)\.so\.1'` — 32-bit entries show as
-  `(libc6)`, 64-bit ones as `(libc6,x86-64)`. `err:hid:udev_bus_init UDEV
-  monitor creation failed` is harmless (input permissions), and the wall of
-  `dbghelp/dwarf2 fixme` lines is just wine dumping the crash backtrace, not
-  a second cause.
-- **`Critical Error: Assertion failed: RenDev` on a friend's machine**
-  (`Assertion failed: RenDev [File:.\WinViewport.cpp]`, `Video: No Video` in
-  the crash log header): the assertion fires in `UWindowsViewport::OpenWindow`
-  called from `UGameEngine::Init`, and it means the global `RenDev` is null —
-  the render device object never initialized. Until wine has a working GL
-  context in the game's process, ini resolution tweaks and device swaps are
-  irrelevant (all 469 renderers end up going through wine's GL): install the
-  32-bit GL libs from the previous bullet (the `./ut99 deps` 32-bit warning
-  confirms it), or run the 32-bit game under the 64-bit WoW64 host
-  (`WINE_BIN=wine64 ./ut99 client …`) if that binary exists. The deployed
-  prefix's `UnrealTournament.ini` also pins the host's renderer
-  (`GameRenderDevice=D3D11Drv.D3D11RenderDevice`, `WindowedViewportX/Y` from
-  the host's monitor); once GL works, lower the viewports if the friend's
-  screen is smaller, and if D3D11Drv still fails on their Intel iGPU switch
-  to OpenGLDrv (safest under wine/Mesa):
-  `sed -i 's/^GameRenderDevice=.*/GameRenderDevice=OpenGLDrv.OpenGLRenderDevice/' ~/wine/unreal-tournament/drive_c/UnrealTournament/System/UnrealTournament.ini`
-  (or `D3D9Drv.D3D9RenderDevice`).
-- **Master servers**: with `DISABLE_UPLINKS=1` the server doesn't advertise
-  itself to public masters (private games, no spam to mostly dead uplinks).
-  Restore the `*.ut99bak` files to undo.
-- **Firewall**: nothing inbound needs opening — tailcat connects outward via
-  DERP and punches to a direct path when possible.
-- **Join success signature** (server console):
-  `NotifyAcceptingChannel … Accepted` → `Level server received: HELLO …` →
-  `Login: <name>` → `Possessed PlayerPawn` → `Join succeeded`. If HELLO never
-  arrives, the tunnel path is broken; if HELLO arrives but no `Login:`, check
-  the client engine log (`ut99-client.log` in `UT_DIR`).
+| Document | Contents |
+|----------|----------|
+| [docs/ini-options.md](docs/ini-options.md) | Why `--bots`/`--goal`/`--time` are written into the ini, the `--skill` config trap, bot spawn timing |
+| [docs/environment.md](docs/environment.md) | All engine environment variables with defaults (for using `scripts/` directly) |
+| [docs/sharing-files.md](docs/sharing-files.md) | Sharing the game install: pack / file-serve / file-pull / deploy details, name scrubbing, pack excludes |
+| [docs/headless.md](docs/headless.md) | Running the client headless under Xvfb (resolution/depth quirks) |
+| [docs/completion.md](docs/completion.md) | Bash shell completion for the wrapper |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | Caveats & troubleshooting: relay vs socat, diagnosing sessions, auto-join and the intro loop, split ports, verifying players and bots, GL-lib fixes for friends, join success signature |
