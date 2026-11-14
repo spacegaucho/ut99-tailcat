@@ -2,7 +2,7 @@
 # host-pack-prefix.sh — pack the UT99 wine prefix into a portable tarball so
 # friends can deploy a ready-to-play install instead of installing the game.
 #
-# Creates:  ut99-wineprefix.tgz  (+ .sha256 next to it)
+# Creates:  files/ut99-wineprefix.tgz  (+ .sha256 next to it)
 # Friend-side deploy: ./client-deploy-prefix.sh
 #
 # The game data (.u/.uz/.umx) is already compressed, so the tgz shrinks the
@@ -21,9 +21,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/ut99-env.sh"
+source "$SCRIPT_DIR/../helpers/ut99-env.sh"
 
-OUT="${UT99_PACK_OUT:-$SCRIPT_DIR/ut99-wineprefix.tgz}"
+OUT="${UT99_PACK_OUT:-$SCRIPT_DIR/../files/ut99-wineprefix.tgz}"
 
 require_cmd tar || exit 1
 if [ ! -d "$WINEPREFIX/drive_c" ] || [ ! -f "$WINEPREFIX/system.reg" ]; then

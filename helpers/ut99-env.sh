@@ -3,7 +3,7 @@
 #
 # Sourced by the other scripts. Every value can be overridden through the
 # environment, e.g.:
-#   UT_UDP_PORT=7778 ./client-start-bridge.sh tcXXXX
+#   UT_UDP_PORT=7778 ./client-start-bridge.sh tcpXXXX
 #   MAP=CTF-1on1-Jail2 ./host-start-server.sh
 #
 # Defaults point at the Lutris "unreal-tournament" install (runner: wine,
@@ -26,7 +26,7 @@ export BRIDGE_TCP_PORT="${BRIDGE_TCP_PORT:-8777}"   # local TCP port of the soca
 export HOST_BRIDGE_TCP_PORT="${HOST_BRIDGE_TCP_PORT:-8777}"
 
 # --- tailcat ----------------------------------------------------------------
-# Optional saved tailcat key name for a stable tc... address across restarts
+# Optional saved tailcat key name for a stable tcp... address across restarts
 # (create one with: tailcat genkey --key ut99). Empty = ephemeral per-run key.
 export TAILCAT_KEY="${TAILCAT_KEY:-}"
 
@@ -77,6 +77,7 @@ tailcat_exec() {
 }
 
 # start_job_trap — kill all background jobs when the script exits (Ctrl+C).
+# Escalates TERM -> KILL because tailcat ignores SIGTERM (SIG_IGN).
 start_job_trap() {
   cleanup() {
     echo
@@ -86,6 +87,11 @@ start_job_trap() {
       # Safety net: also kill any child processes of each job.
       pkill -TERM -P "$job" 2>/dev/null || true
       kill -TERM "$job" 2>/dev/null || true
+    done
+    sleep 1
+    for job in $(jobs -p); do
+      pkill -KILL -P "$job" 2>/dev/null || true
+      kill -KILL "$job" 2>/dev/null || true
     done
     wait 2>/dev/null || true
   }

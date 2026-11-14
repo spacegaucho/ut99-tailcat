@@ -8,7 +8,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/ut99-env.sh"
+source "$SCRIPT_DIR/../helpers/ut99-env.sh"
 
 MAP="${MAP:-CTF-Face}"
 GAME_TYPE="${GAME_TYPE:-Botpack.CTFGame}"

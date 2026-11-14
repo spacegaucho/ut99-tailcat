@@ -1,0 +1,430 @@
+#!/usr/bin/env bash
+# ut99 — single wrapper for the whole project: dedicated server, game client,
+# tailcat/socat bridges, LAN-only play, prefix packing, dependency install.
+#
+#   ut99 server  [game options] [tunnel options]   server (+ internet bridge)
+#   ut99 client  [tcp...] [tunnel options]           game (+ internet bridge)
+#   ut99 bridge  host|client ...                    bridges only
+#   ut99 probe   [port]                             net-test a listening server
+#   ut99 pack / deploy / deps                       prefix tarball helpers
+#   ut99 help                                       this list
+#
+# Direct LAN play: `ut99 server --lan`, then clients join host-ip:7777
+# (or `ut99 client` on the host machine itself).
+# Internet play:   `ut99 server` prints a tcp... address; each friend runs
+#                  `ut99 client <tcp...>` — the bridge starts with the game and
+#                  one Ctrl+C stops both.
+#
+# Every setting is also available as the documented environment variables
+# (see README); this wrapper just maps flags onto them.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+S="$ROOT/scripts"
+
+usage() {
+  cat <<'EOF'
+ut99 — Unreal Tournament 99 over LAN or the internet (tailcat + socat)
+
+USAGE
+  ut99 server  [options]        Dedicated server. Default also starts the
+                                tailcat/socat host bridge and prints the tcp...
+                                address; the host player joins with `ut99 client`.
+  ut99 client  [tcp...] [opts]   Game client. With a tcp... address it starts the
+                                client bridge first, waits until the tunnel is
+                                up, then launches the game (auto-joins during
+                                the intro). Without an address: direct LAN join.
+  ut99 bridge  host [--bridge-port N] [--port N] [--tc-key NAME]
+  ut99 bridge  client <tcp...> [--bridge-port N] [--host-port N] [--port N] [--tc-key NAME]
+                                Run only one side of the bridge (separate terminals).
+  ut99 probe   [port]           Send a net-test datagram to 127.0.0.1:port
+                                (default 7777); a reply proves server/bridge up.
+  ut99 pack    [--out PATH] [--keep LIST] [--prefix DIR]
+  ut99 deploy  [--tgz PATH] [--prefix DIR] [--force]
+  ut99 deps
+
+SERVER game options
+  --map NAME            Map to start on                     (default CTF-Face)
+  --mode ctf|dm|instagib|team|dom
+                        Game mode preset (pure presets, no mutators)
+  --instagib            Add the InstaGib mutator to any mode (ctf/dm/team/dom)
+  --game CLASS          Override the mode mapping entirely, e.g. Botpack.TeamGamePlus
+  --mutators a,b,c      Additional mutators (InstaGib via --instagib)
+  --bots N              Bot fill up to N players            (default 4)
+  --skill 0-7           Bot difficulty: 0 Novice .. 7 Godlike (default 3)
+  --goal N              GoalScore                           (default 5)
+  --time MIN            TimeLimit in minutes                (default 15)
+  --opts RAW            Full raw URL options, e.g. '?GoalScore=10?Game=...'
+                        — overrides ALL of the above assembly
+  --keep-uplinks        Do NOT comment out master-server uplink lines
+
+Networking options (server)
+  --lan                 Server only, no bridges (plain LAN game on UDP 7777)
+  --port N              Server UDP port (default 7777); the host bridge follows
+  --bridge-port N       Host bridge TCP port                (default 8777)
+  --tc-key NAME         Saved tailcat key name (stable tcp... address)
+
+Networking options (client)
+  --lan                 No bridge; join directly (default target 127.0.0.1:port)
+  --join HOST:PORT      Explicit join target instead of the auto-join default
+  --port N              Local UDP port the client uses/joins (default 7777)
+  --bridge-port N       Client-side bridge TCP port          (default 8777)
+  --host-port N         Host bridge TCP port it connects to  (default 8777)
+  --tc-key NAME         Saved tailcat key name (stable tcp... address)
+  --no-join             Start at the main menu instead of auto-joining
+  --xvfb / --no-xvfb    Force / forbid running the game under Xvfb. Default:
+                        automatic when DISPLAY is unset (headless sessions).
+  --xvfb-res WxH        Xvfb screen size (default 2560x1440 = the game's
+                        FullscreenViewport in UnrealTournament.ini; depth is
+                        fixed at 24-bit — Xvfb here refuses 32-bit screens)
+  -- ARGS               Everything after '--' is passed to the game untouched
+
+Options valid on server/client/deploy/pack
+  --prefix DIR          WINEPREFIX override
+  --wine-bin PATH       wine binary override
+EOF
+}
+
+err() { echo "ut99: $*" >&2; }
+
+need_int() {   # need_int <name> <value> — integer check
+  [[ "$2" =~ ^[0-9]+$ ]] || { err "$1 needs a number, got: $2"; exit 2; }
+}
+
+# ---- shared trap for combined (server+bridge / bridge+game) modes ----------
+# What we started in combined mode decides what cleanup is allowed to touch.
+STARTED_SERVER=0 STARTED_BRIDGE=0 STARTED_GAME=0
+
+kill_tree() {   # kill_tree <pid> <TERM|KILL>
+  local pid="$1" sig="$2" c
+  for c in $(pgrep -P "$pid" 2>/dev/null); do kill_tree "$c" "$sig"; done
+  kill -"$sig" "$pid" 2>/dev/null || true
+}
+
+combined_cleanup() {
+  err "Stopping ut99 processes..."
+  local job
+  # Use our own recorded PIDs, not live 'jobs -p': bash may reap a finished
+  # job before the KILL pass runs, orphaning SIGTERM-immune tailcat.
+  for job in "${started_jobs[@]}"; do kill_tree "$job" TERM; done
+  sleep 1.5
+  for job in "${started_jobs[@]}"; do kill_tree "$job" KILL; done
+  # tailcat inherits SIG_IGN and only ever dies to SIGKILL. It is normally a
+  # direct descendant of our jobs (tailcat_exec), but if the script shell
+  # exited first the job pid is already reaped and the tree KILL above misses
+  # it — so SIGKILL everything tailcat inside *our own process group*. Group
+  # scoping makes this safe for the other side of a loopback test or any
+  # other tailcat user on the machine.
+  if [ "$STARTED_BRIDGE" = 1 ]; then
+    pkill -KILL -g 0 -x tailcat 2>/dev/null || true
+  fi
+  # NOTE: 'pgrep/pkill -x' matches the kernel comm, which is truncated to 15
+  # chars — 'UnrealTournament.exe' can never match. Use the truncated comm
+  # plus a cmdline match ('-f'), which our own scripts' cmdlines never contain.
+  wine_alive() {
+    pgrep -x UCC.exe >/dev/null 2>&1 \
+      || pgrep -x UnrealTournam >/dev/null 2>&1 \
+      || pgrep -f 'UnrealTournament\.exe' >/dev/null 2>&1
+  }
+  if { [ "$STARTED_SERVER" = 1 ] || [ "$STARTED_GAME" = 1 ]; } && wine_alive; then
+    # UCC.exe/game are children of wineserver, not of our jobs: ask wineserver
+    # to end its clients gracefully, then force.
+    pkill -TERM -x UCC.exe 2>/dev/null || true
+    pkill -TERM -x UnrealTournam 2>/dev/null || true
+    pkill -TERM -f 'UnrealTournament\.exe' 2>/dev/null || true
+    pkill -TERM -x wineserver 2>/dev/null || true
+    sleep 1.5
+    pkill -KILL -x UCC.exe 2>/dev/null || true
+    pkill -KILL -x UnrealTournam 2>/dev/null || true
+    pkill -KILL -f 'UnrealTournament\.exe' 2>/dev/null || true
+    pkill -KILL -x wineserver 2>/dev/null || true
+  fi
+}
+combined_traps() { trap combined_cleanup EXIT INT TERM; }
+
+# job_pipe <label> <cmd...> — run a child, prefix its output, background it
+started_jobs=()
+job_pipe() {
+  local label="$1"; shift
+  ( "$@" 2>&1 | awk -v tag="[$label] " '{print tag $0; fflush()}' ) &
+  started_jobs+=($!)
+}
+
+# monitor_jobs — stay alive while any backgrounded job lives; exit as soon as
+# none do (or, in two-job combined mode, as soon as either dies so the EXIT
+# trap cleans up the other). Polls instead of 'wait' because bash defers
+# trapped signals inside plain 'wait'.
+monitor_jobs() {
+  local pids p alive
+  while :; do
+    pids=($(jobs -p)); alive=0
+    for p in "${pids[@]}"; do kill -0 "$p" 2>/dev/null && { alive=1; break; }; done
+    [ "$alive" = 1 ] || break
+    sleep 1
+  done
+}
+
+# ---- ut99 server ------------------------------------------------------------
+cmd_server() {
+  local map=CTF-Face mode=ctf insta=0 game_type="" mutators="" raw_opts=""
+  local bots=4 skill=3 goal=5 time=15 lan=0 port="" bridge_port=""
+  local uplinks=1 m
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --map)      map="$2"; shift 2 ;;
+      --mode)     mode="$2"; shift 2 ;;
+      --instagib) insta=1; shift ;;
+      --game)     game_type="$2"; shift 2 ;;
+      --mutators) mutators="$2"; shift 2 ;;
+      --opts)     raw_opts="$2"; shift 2 ;;
+      --bots)     bots="$2"; need_int --bots "$bots"; shift 2 ;;
+      --skill)    skill="$2"; need_int --skill "$skill"; shift 2 ;;
+      --goal)     goal="$2"; need_int --goal "$goal"; shift 2 ;;
+      --time)     time="$2"; need_int --time "$time"; shift 2 ;;
+      --lan)      lan=1; shift ;;
+      --port)     port="$2"; need_int --port "$port"; shift 2 ;;
+      --bridge-port) bridge_port="$2"; need_int --bridge-port "$bridge_port"; shift 2 ;;
+      --tc-key)   export TAILCAT_KEY="$2"; shift 2 ;;
+      --keep-uplinks) uplinks=0; shift ;;
+      --prefix)   export WINEPREFIX="$2"; shift 2 ;;
+      --wine-bin) export WINE_BIN="$2"; shift 2 ;;
+      -h|--help)  sed -n '/^SERVER game options/,/^Networking options (server)/p' <<EOF
+SERVER game options
+  --map NAME  --mode ctf|dm|instagib|team|dom  --instagib  --game CLASS
+  --mutators a,b  --opts RAW  --bots N  --skill 0-7  --goal N  --time MIN
+  --keep-uplinks   --lan  --port N  --bridge-port N  --tc-key NAME  --prefix DIR  --wine-bin PATH
+EOF
+        exit 0 ;;
+      *) err "unknown server option: $1"; exit 2 ;;
+    esac
+  done
+
+  # mode → game class mapping (pure presets; --game wins outright)
+  if [ -z "$game_type" ]; then
+    case "$mode" in
+      ctf)      game_type="Botpack.CTFGame" ;;
+      dm)       game_type="Botpack.DeathMatchPlus" ;;
+      instagib) game_type="Botpack.DeathMatchPlus"; insta=1 ;;
+      team)     game_type="Botpack.TeamGamePlus" ;;
+      dom)      game_type="Botpack.Domination" ;;
+      *) err "--mode must be ctf|dm|instagib|team|dom (or use --game CLASS)"; exit 2 ;;
+    esac
+  fi
+
+  # build ?Mutator=... from --instagib and --mutators
+  local mut=()
+  [ "$insta" = 1 ] && mut+=("Botpack.InstaGibDM")
+  if [ -n "$mutators" ]; then
+    IFS=',' read -r -a m <<< "$mutators"
+    for m in "${m[@]}"; do [ -n "$m" ] && mut+=("$m"); done
+  fi
+
+  local extra=""
+  if [ -n "$raw_opts" ]; then
+    extra="$raw_opts"                       # full passthrough wins
+  else
+    [ "${#mut[@]}" -gt 0 ] && extra+="?Mutator=$(IFS=+; echo "${mut[*]}")"
+    extra+="?MinPlayers=$bots?GoalScore=$goal?TimeLimit=$time?Difficulty=$skill"
+  fi
+  if [ -n "$port" ]; then
+    export UT_UDP_PORT="$port"
+    [ -z "$raw_opts" ] && extra+="?port=$port"   # tell UCC to bind this port
+  fi
+  [ -n "$bridge_port" ] && export BRIDGE_TCP_PORT="$bridge_port"
+  export MAP="$map" GAME_TYPE="$game_type" EXTRA_OPTS="$extra" DISABLE_UPLINKS="$uplinks"
+
+  echo "ut99 server: map=$map game=$game_type opts=$extra lan=$lan"
+
+  combined_traps
+  STARTED_SERVER=1
+  if [ "$lan" = 1 ]; then
+    job_pipe server "$S/host-start-server.sh"
+    monitor_jobs
+    return
+  fi
+
+  STARTED_BRIDGE=1
+  job_pipe server "$S/host-start-server.sh"
+  job_pipe bridge "$S/host-start-bridge.sh"
+  echo "Combined mode: server + tailcat bridge. Share the printed tcp... address;"
+  echo "friends run:  ut99 client <tcp...>   (you:  ut99 client). Ctrl+C stops both."
+  monitor_jobs
+}
+
+# ---- ut99 client ------------------------------------------------------------
+cmd_client() {
+  local tc="" lan=0 join="" port="" bridge_port="" host_port="" nojoin=0
+  local xvfb="" xvfb_res="${UT99_XVFB_RES:-2560x1440}"
+  local game_args=() game_cmd=()
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --lan)     lan=1; shift ;;
+      --join)    join="$2"; shift 2 ;;
+      --port)    port="$2"; need_int --port "$port"; shift 2 ;;
+      --bridge-port) bridge_port="$2"; need_int --bridge-port "$bridge_port"; shift 2 ;;
+      --host-port) host_port="$2"; need_int --host-port "$host_port"; shift 2 ;;
+      --tc-key)  export TAILCAT_KEY="$2"; shift 2 ;;
+      --no-join) nojoin=1; shift ;;
+      --xvfb)    xvfb=1; shift ;;
+      --no-xvfb) xvfb=0; shift ;;
+      --xvfb-res) xvfb_res="$2"; shift 2 ;;
+      --prefix)  export WINEPREFIX="$2"; shift 2 ;;
+      --wine-bin) export WINE_BIN="$2"; shift 2 ;;
+      -h|--help) sed -n '/^Networking options (client)/,/^Options valid/p' <<EOF
+Networking options (client)
+  --lan  --join HOST:PORT  --port N  --bridge-port N  --host-port N
+  --tc-key NAME  --no-join  --xvfb/--no-xvfb  --xvfb-res WxH
+  -- ARGS (passed to the game)  --prefix DIR  --wine-bin PATH
+EOF
+        exit 0 ;;
+      --)        shift; game_args=("$@"); break ;;
+      tc*)       tc="$1"; shift ;;
+      *) err "unknown client option or missing tcp... address: $1"; exit 2 ;;
+    esac
+  done
+
+  [ -n "$port" ] && export UT_UDP_PORT="$port"
+  [ -n "$bridge_port" ] && export BRIDGE_TCP_PORT="$bridge_port"
+  [ -n "$host_port" ] && export HOST_BRIDGE_TCP_PORT="$host_port"
+  [ "$nojoin" = 1 ] && export UT_AUTOJOIN=0
+
+  local ut_udp_port="${UT_UDP_PORT:-7777}"
+
+  # Xvfb for the game window: explicit flag wins; otherwise automatic when
+  # there is no DISPLAY (e.g. ssh/headless sessions). Depth is x24: Xvfb on
+  # this system refuses x32 screens ("Couldn't add screen 0"), and wine maps
+  # a 24-bit root window to 32-bit rendering the same way any real desktop
+  # does. Keep the resolution equal to the game's FullscreenViewportX/Y in
+  # UnrealTournament.ini — a mismatch makes the swapchain resize and wine
+  # dies with an X BadWindow error during startup.
+  if [ -z "$xvfb" ] && [ -z "${DISPLAY:-}" ]; then xvfb=1; fi
+  if [ "$xvfb" = 1 ]; then
+    command -v xvfb-run >/dev/null || { err "xvfb-run not found (install xvfb) — or use --no-xvfb to try DISPLAY=$DISPLAY directly."; exit 1; }
+    game_cmd=(xvfb-run -a -s "-screen 0 ${xvfb_res}x24")
+    err "Game window on Xvfb ${xvfb_res}x24 (use --no-xvfb to force your DISPLAY)."
+  fi
+
+  if [ -z "$tc" ] || [ "$lan" = 1 ]; then
+    # direct LAN client: no bridge
+    combined_traps
+    STARTED_GAME=1
+    [ -n "$join" ] && game_args=("$join" "${game_args[@]}")
+    job_pipe game "${game_cmd[@]+"${game_cmd[@]}"}" "$S/client-start-ut99.sh" "${game_args[@]+"${game_args[@]}"}"
+    monitor_jobs
+    return
+  fi
+
+  # remote client: bridge + game combined
+  combined_traps
+  STARTED_BRIDGE=1
+  job_pipe bridge "$S/client-start-bridge.sh" "$tc"
+
+  # wait until the bridge's UDP listener is actually up before auto-joining
+  local up=0 i
+  for i in $(seq 1 60); do
+    ss -lun 2>/dev/null | grep -qE "[:.]${ut_udp_port}( |$)" && { up=1; break; }
+    kill -0 "$(jobs -p | sed -n 1p)" 2>/dev/null || break
+    sleep 0.5
+  done
+  if [ "$up" != 1 ]; then
+    err "client bridge never bound UDP :${ut_udp_port} — check the tcp... address and the host."
+    exit 1
+  fi
+
+  if [ -n "$join" ]; then
+    game_args=("$join" "${game_args[@]}")
+  fi
+  echo "ut99 client: bridge up on UDP :${ut_udp_port}, launching game (auto-join unless --no-join)."
+  STARTED_GAME=1
+  job_pipe game "${game_cmd[@]+"${game_cmd[@]}"}" "$S/client-start-ut99.sh" "${game_args[@]+"${game_args[@]}"}"
+  monitor_jobs
+}
+
+# ---- ut99 bridge ------------------------------------------------------------
+cmd_bridge() {
+  local side="${1:-}"; shift || true
+  case "$side" in
+    host)
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --bridge-port) export BRIDGE_TCP_PORT="$2"; need_int --bridge-port "$2"; shift 2 ;;
+          --port)        export UT_UDP_PORT="$2"; need_int --port "$2"; shift 2 ;;
+          --tc-key)      export TAILCAT_KEY="$2"; shift 2 ;;
+          *) err "unknown bridge host option: $1"; exit 2 ;;
+        esac
+      done
+      exec "$S/host-start-bridge.sh" ;;
+    client)
+      local tc="${1:-}"; [ $# -gt 0 ] && shift
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --bridge-port) export BRIDGE_TCP_PORT="$2"; need_int --bridge-port "$2"; shift 2 ;;
+          --host-port)   export HOST_BRIDGE_TCP_PORT="$2"; need_int --host-port "$2"; shift 2 ;;
+          --port)        export UT_UDP_PORT="$2"; need_int --port "$2"; shift 2 ;;
+          --tc-key)      export TAILCAT_KEY="$2"; shift 2 ;;
+          *) err "unknown bridge client option: $1"; exit 2 ;;
+        esac
+      done
+      exec "$S/client-start-bridge.sh" ${tc:+"$tc"} ;;
+    *) err "usage: ut99 bridge host|client ..."; exit 2 ;;
+  esac
+}
+
+# ---- ut99 probe --------------------------------------------------------------
+cmd_probe() {
+  local port="${1:-7777}"
+  need_int probe "$port"
+  python3 - "$port" <<'PYEOF'
+import socket, sys
+port = int(sys.argv[1])
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.settimeout(5)
+s.sendto(b'\x00\x01\x00\x00\x00UUnreal', ('127.0.0.1', port))
+try:
+    data, addr = s.recvfrom(2048)
+    print(f"reply from {addr}: {data!r}  -> server reachable through UDP :{port}")
+except TimeoutError:
+    sys.exit(f"no reply on UDP :{port} — server or bridge not up?")
+PYEOF
+}
+
+# ---- ut99 pack / deploy / deps ----------------------------------------------
+cmd_pack() {
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --out)    export UT99_PACK_OUT="$2"; shift 2 ;;
+      --keep)   export UT99_PACK_KEEP="$2"; shift 2 ;;
+      --prefix) export WINEPREFIX="$2"; shift 2 ;;
+      *) err "unknown pack option: $1"; exit 2 ;;
+    esac
+  done
+  exec "$S/host-pack-prefix.sh"
+}
+
+cmd_deploy() {
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --tgz)    export UT99_PREFIX_TGZ="$2"; shift 2 ;;
+      --prefix) export WINEPREFIX="$2"; shift 2 ;;
+      --force)  export UT99_DEPLOY_FORCE=1; shift ;;
+      *) err "unknown deploy option: $1"; exit 2 ;;
+    esac
+  done
+  exec "$S/client-deploy-prefix.sh"
+}
+
+# ---- dispatch ----------------------------------------------------------------
+cmd="${1:-help}"; shift || true
+case "$cmd" in
+  server) cmd_server "$@" ;;
+  client) cmd_client "$@" ;;
+  bridge) cmd_bridge "$@" ;;
+  probe)  cmd_probe "$@" ;;
+  pack)   cmd_pack "$@" ;;
+  deploy) cmd_deploy "$@" ;;
+  deps)   exec "$S/install-deps.sh" "$@" ;;
+  help|-h|--help) usage ;;
+  *) err "unknown command: $cmd"; echo; usage; exit 2 ;;
+esac

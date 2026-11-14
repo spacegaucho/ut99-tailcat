@@ -1,4 +1,4 @@
 # big shared tarball from host-pack-prefix.sh (keep out of git)
-ut99-wineprefix.tgz
-ut99-wineprefix.tgz.sha256
-ut99-wineprefix*.tar.*
+files/ut99-wineprefix.tgz
+files/ut99-wineprefix.tgz.sha256
+files/ut99-wineprefix*.tar.*

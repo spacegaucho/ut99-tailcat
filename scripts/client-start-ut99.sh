@@ -20,7 +20,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/ut99-env.sh"
+source "$SCRIPT_DIR/../helpers/ut99-env.sh"
 
 require_cmd "$WINE_BIN" || exit 1
 
@@ -57,4 +57,13 @@ if [ "${#game_args[@]}" -gt 0 ]; then
   echo "Auto-joining ${game_args[0]} — the join proceeds during the intro movies."
 fi
 echo "Fallback if it fails: Multiplayer > Join Game > Open Game > 127.0.0.1:${UT_UDP_PORT}"
-exec "${WINE_BIN}" "$(basename "$game_exe")" "${game_args[@]}"
+
+# UT's own engine log (net attempts, rejections, join state) — the client-side
+# view that plain wine stdout never shows. -forcelogflush keeps it usable when
+# the process is killed. Written to $UT_DIR/ut99-client.log; disable with
+# UT99_LOG=0.
+ut99_log=()
+if [ "${UT99_LOG:-1}" = "1" ]; then
+  ut99_log=(-log=ut99-client.log -forcelogflush)
+fi
+exec "${WINE_BIN}" "$(basename "$game_exe")" "${game_args[@]}" "${ut99_log[@]}"

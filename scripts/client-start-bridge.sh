@@ -6,12 +6,12 @@
 #     ...tailcat tunnel...--> host's tailcat serve 8777 --> host's socat --> host's UT99 server
 #
 # Usage: ./client-start-bridge.sh <tc-address>
-#   or:  TC_ADDR=tcXXXX ./client-start-bridge.sh
+#   or:  TC_ADDR=tcpXXXX ./client-start-bridge.sh
 # If the host uses a different bridge port, set HOST_BRIDGE_TCP_PORT=...
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/ut99-env.sh"
+source "$SCRIPT_DIR/../helpers/ut99-env.sh"
 
 TC_ADDR="${1:-${TC_ADDR:-}}"
 if [ -z "$TC_ADDR" ]; then

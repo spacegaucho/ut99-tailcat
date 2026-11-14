@@ -2,7 +2,7 @@
 # client-deploy-prefix.sh — unpack a ut99-wineprefix tarball into a fresh
 # WINEPREFIX so a client can immediately run the bridges and join a game.
 #
-# Looks for the tarball next to this script (ut99-wineprefix.tgz), or at the
+# Looks for the tarball in ../files/ut99-wineprefix.tgz, or at the
 # path given in UT99_PREFIX_TGZ. A matching .sha256 is verified automatically
 # when present. The tarball stores paths relative to the prefix root, so it
 # extracts fine under any directory/user name.
@@ -15,9 +15,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/ut99-env.sh"
+source "$SCRIPT_DIR/../helpers/ut99-env.sh"
 
-TGZ="${UT99_PREFIX_TGZ:-$SCRIPT_DIR/ut99-wineprefix.tgz}"
+TGZ="${UT99_PREFIX_TGZ:-$SCRIPT_DIR/../files/ut99-wineprefix.tgz}"
 
 require_cmd tar || exit 1
 
