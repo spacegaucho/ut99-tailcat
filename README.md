@@ -436,15 +436,23 @@ errors; a zsh user can wrap this with bashcompinit).
   monitor creation failed` is harmless (input permissions), and the wall of
   `dbghelp/dwarf2 fixme` lines is just wine dumping the crash backtrace, not
   a second cause.
-- **`Critical Error: Assertion failed: RenDev` on a friend's machine**: the
-  engine booted but no render device could be created — the deployed prefix's
-  `UnrealTournament.ini` selects the host's renderer
-  (`GameRenderDevice=D3D11Drv.D3D11RenderDevice`), and D3D11Drv can fail under
-  wine on some Intel iGPUs. 469 ships the fallbacks; the safest one under
-  wine/Mesa is OpenGLDrv:
+- **`Critical Error: Assertion failed: RenDev` on a friend's machine**
+  (`Assertion failed: RenDev [File:.\WinViewport.cpp]`, `Video: No Video` in
+  the crash log header): the assertion fires in `UWindowsViewport::OpenWindow`
+  called from `UGameEngine::Init`, and it means the global `RenDev` is null —
+  the render device object never initialized. Until wine has a working GL
+  context in the game's process, ini resolution tweaks and device swaps are
+  irrelevant (all 469 renderers end up going through wine's GL): install the
+  32-bit GL libs from the previous bullet (the `./ut99 deps` 32-bit warning
+  confirms it), or run the 32-bit game under the 64-bit WoW64 host
+  (`WINE_BIN=wine64 ./ut99 client …`) if that binary exists. The deployed
+  prefix's `UnrealTournament.ini` also pins the host's renderer
+  (`GameRenderDevice=D3D11Drv.D3D11RenderDevice`, `WindowedViewportX/Y` from
+  the host's monitor); once GL works, lower the viewports if the friend's
+  screen is smaller, and if D3D11Drv still fails on their Intel iGPU switch
+  to OpenGLDrv (safest under wine/Mesa):
   `sed -i 's/^GameRenderDevice=.*/GameRenderDevice=OpenGLDrv.OpenGLRenderDevice/' ~/wine/unreal-tournament/drive_c/UnrealTournament/System/UnrealTournament.ini`
-  (or `D3D9Drv.D3D9RenderDevice`). The ini's `WindowedViewportX/Y` also comes
-  from the host's monitor — lower it if the friend's screen is smaller.
+  (or `D3D9Drv.D3D9RenderDevice`).
 - **Master servers**: with `DISABLE_UPLINKS=1` the server doesn't advertise
   itself to public masters (private games, no spam to mostly dead uplinks).
   Restore the `*.ut99bak` files to undo.
