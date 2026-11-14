@@ -420,6 +420,17 @@ errors; a zsh user can wrap this with bashcompinit).
   (32-bit Windows binaries under wine: `UCC.exe`, `UnrealTournament.exe`,
   `D3D11Drv.dll`…); no native `ucc-bin`. Server scripts use `ucc-bin`
   automatically if a native build is installed.
+- **Friend's game dies right after launch** (`err:wgl:egl_init Failed to load
+  libEGL.so.1`, `Failed to load libGL`, `OpenGL support is disabled`, then
+  `Library d3d11.dll ... needed by D3D11Drv.dll not found`): their distro has
+  wine but not the desktop GL loader libraries, so wined3d gets no GL context
+  and 469's D3D11Drv renderer can't load. Install them — Ubuntu/Debian
+  `sudo apt install libgl1 libegl1 libgl1-mesa-dri`, Arch `sudo pacman -S
+  mesa`, Fedora `sudo dnf install mesa-libGL mesa-libEGL mesa-dri-drivers` —
+  `./ut99 deps` now checks for this. `err:hid:udev_bus_init UDEV monitor
+  creation failed` is harmless (input permissions), and the wall of
+  `dbghelp/dwarf2 fixme` lines is just wine dumping the crash backtrace, not
+  a second cause.
 - **Master servers**: with `DISABLE_UPLINKS=1` the server doesn't advertise
   itself to public masters (private games, no spam to mostly dead uplinks).
   Restore the `*.ut99bak` files to undo.

@@ -30,6 +30,22 @@ fi
 WINE_BIN="${WINE_BIN:-wine}"
 if command -v "$WINE_BIN" >/dev/null 2>&1; then
   echo "wine: found ($WINE_BIN -> $(command -v "$WINE_BIN"), $("$WINE_BIN" --version 2>/dev/null || echo version unknown))"
+  # wine without the GL loader libs starts but runs with OpenGL disabled:
+  # wined3d gets no context and 469's D3D11Drv.dll fails to import (d3d11.dll
+  # "not found") -> instant crash.  Catch that here (skip where ldconfig is absent).
+  if command -v ldconfig >/dev/null 2>&1; then
+    gl_missing=""
+    for lib in libGL.so.1 libEGL.so.1; do
+      ldconfig -p 2>/dev/null | grep -qE "(^|[[:space:]])${lib}[[:space:]]" || gl_missing="$gl_missing $lib"
+    done
+    if [ -n "$gl_missing" ]; then
+      err "GL loader libs missing:$gl_missing — wine would run with OpenGL disabled and the game would crash."
+      err "Ubuntu/Debian: sudo apt install libgl1 libegl1 libgl1-mesa-dri"
+      err "Arch:          sudo pacman -S mesa"
+      err "Fedora:        sudo dnf install mesa-libGL mesa-libEGL mesa-dri-drivers"
+      exit 1
+    fi
+  fi
 else
   err "wine not found (checked for '$WINE_BIN' in PATH)."
   err "UT99 469 ships 32-bit Windows binaries, so wine is required to run the game."
