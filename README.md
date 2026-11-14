@@ -41,30 +41,39 @@ files/                  pack output (gitignored)
 
 ## Quick start
 
+### Server side (the host's machine)
+
 ```sh
 ./ut99 deps                     # tailcat + python3 if missing, checks wine
 
-# Host (one terminal): starts server AND bridge, prints the tcp... address
+# one terminal: starts server AND bridge, prints the tcp... address
 ./ut99 server --mode instagib --bots 4
 
-# [optional, once per new friend] host side: friend has no game install yet,
-# so the host serves them the game files (file-serve gets its own terminal,
-# alongside the server):
+# [optional, once per new friend] friend has no game install yet, so the
+# host serves them the game files:
 ./ut99 pack                     # -> files/ut99-wineprefix.tgz (+ .sha256)
-./ut99 file-serve               # prints a SECOND tcp... address, for the files
-
-# [optional, once per new friend] client side, on the friend's machine:
-./ut99 file-pull <file-serve tcp... address> --deploy
-                                # fetch + unpack into their WINEPREFIX
-
-# Each friend (one terminal): bridge + game in one command
-./ut99 client tcpGFwWCDL...     # the address the host's server printed
-                                # [optional] --name Archon (player name, max 16 chars)
-
-# Host player's own game (second terminal)
-./ut99 client                   # direct LAN join, no bridge
+./ut99 file-serve               # second terminal, alongside the server:
+                                # prints a SECOND tcp... address, for the files
 
 ./ut99 probe 7777               # optional: datagram ping proving server is up
+```
+
+### Client side (each friend's machine, plus the host player's own game)
+
+```sh
+./ut99 deps                     # same check, on the friend's machine
+
+# [optional, once] friend has no game install yet: fetch + unpack the
+# files the host's file-serve is sharing
+./ut99 file-pull <file-serve tcp... address> --deploy
+                                # extracts into their WINEPREFIX
+
+# bridge + game in one command:
+./ut99 client tcpGFwWCDL...     # the tcp... the host's `server` printed
+                                # [optional] --name Archon (player name, max 16 chars)
+
+# on the host machine itself no address is needed (second terminal):
+./ut99 client                   # direct LAN join, no bridge
 ```
 
 Ctrl+C anywhere stops everything that command started (bridges, server, game).
