@@ -59,6 +59,27 @@ files/                  pack output (gitignored)
 Ctrl+C anywhere stops everything that command started (bridges, server, game).
 LAN-only play: `./ut99 server --lan`, clients join `host-ip:7777`.
 
+Optional steps for a first session with a new friend:
+
+```sh
+# 1. Friend has no game install yet: host serves them the game files (one time)
+./ut99 pack                     # host, once: -> files/ut99-wineprefix.tgz (+ .sha256)
+./ut99 file-serve               # host, own terminal (alongside the server):
+                                # prints a SECOND tcp... address, for the files
+
+# 2. Friend fetches + unpacks the game into their WINEPREFIX (one time)
+./ut99 file-pull <file-serve tcp... address> --deploy
+
+# 3. Friend joins with a chosen player name (any client run, optional)
+./ut99 client <bridge tcp... address> --name Archon
+```
+
+`--name` writes the player name into `[DefaultPlayer] Name` in `User.ini`
+(the engine takes it from there into the join URL); omit it and the wrapper
+picks a throwaway random `Player-XXXX`. Engine limit: 16 characters.
+The `file-serve` address and the `server` bridge address are two different
+`tcp...` strings; details in *Sharing the game install* below.
+
 ## `ut99` commands
 
 | Command         | What it does                                                       |
