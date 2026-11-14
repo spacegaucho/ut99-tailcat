@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ut99-env.sh — shared configuration for all ut99-socat-tailcat scripts.
+# ut99-env.sh — shared configuration for all ut99-tailcat scripts.
 #
 # Sourced by the ut99 wrapper and by the scripts in scripts/.  Every value can
 # be overridden through the environment, e.g.:

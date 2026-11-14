@@ -1,6 +1,6 @@
 # Caveats & troubleshooting
 
-Part of the [ut99-socat-tailcat](../README.md) docs.
+Part of the [ut99-tailcat](../README.md) docs.
 
 - **Datagram boundaries are the whole game (why a relay, not socat).** tailcat
   carries TCP byte streams; UT99 speaks UDP. The original socat bridge

@@ -1,6 +1,6 @@
 # Headless / Xvfb
 
-Part of the [ut99-socat-tailcat](../README.md) docs.
+Part of the [ut99-tailcat](../README.md) docs.
 
 `ut99 client` runs the game under `xvfb-run` automatically when `DISPLAY` is
 unset (ssh sessions, CI). Notes learned the hard way:

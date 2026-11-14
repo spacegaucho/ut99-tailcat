@@ -1,4 +1,4 @@
-# ut99-socat-tailcat
+# ut99-tailcat
 
 Play an Unreal Tournament 99 (GOTY) LAN game across the internet using
 [tailcat](https://github.com/tailscale/tailcat) (WireGuard-encrypted
@@ -6,8 +6,8 @@ point-to-point tunnel via DERP, no accounts/ports/VPN setup) bridged with the
 included datagram-framed UDP↔TCP relay (`scripts/ut99-bridge.py`), because
 tailcat's forwarded ports are TCP-only while UT99 speaks UDP (tailcat's
 separate built-in file service is the one exception — used by `ut99
-file-serve` to share the game pack). The name is historical: socat was the
-original bridge; the relay replaced it because raw byte-stream bridging
+file-serve` to share the game pack). An early revision bridged with
+plain socat; the included relay replaced it because raw byte-stream bridging
 corrupts the game — see [troubleshooting](docs/troubleshooting.md):
 
 ```

@@ -1,6 +1,6 @@
 # Sharing the game install (one-time setup for friends)
 
-Part of the [ut99-socat-tailcat](../README.md) docs. The quick-start version of
+Part of the [ut99-tailcat](../README.md) docs. The quick-start version of
 these commands is in the README; this page has the full details and notes.
 
 Instead of each friend installing and patching UT99 themselves, pack your

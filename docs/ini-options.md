@@ -1,6 +1,6 @@
 # Game options deep dive
 
-Part of the [ut99-socat-tailcat](../README.md) docs. The flags themselves are
+Part of the [ut99-tailcat](../README.md) docs. The flags themselves are
 listed in the [server game options table](../README.md#server-game-options);
 this page covers what the engine actually does with them.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install-deps.sh — install what ut99-socat-tailcat needs:
+# install-deps.sh — install what ut99-tailcat needs:
 #   * tailcat (latest linux binary from the GitHub release, verified with sha256)
 #   * python3 (runs the datagram-framed UDP<->TCP relay, scripts/ut99-bridge.py)
 #   * wine    (checked only, never auto-installed: runs the 32-bit Windows

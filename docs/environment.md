@@ -1,6 +1,6 @@
 # Engine environment variables
 
-Part of the [ut99-socat-tailcat](../README.md) docs.
+Part of the [ut99-tailcat](../README.md) docs.
 
 The wrapper maps flags onto these; when using `scripts/` directly, set them
 yourself. Defaults match the Lutris `unreal-tournament` install (wine runner,
