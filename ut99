@@ -58,7 +58,8 @@ USAGE
                                 Fetch the tgz + .sha256 from a host's file-serve
                                 into files/ and verify it (skips the download
                                 when the local copy already matches; see help).
-  ut99 deps
+  ut99 deps                     install tailcat + python3 if missing,
+                                check wine presence (see help)
   ut99 --completion bash        bash completion script:
                                 source <(./ut99 --completion bash)
 
@@ -512,7 +513,7 @@ ut99 file-serve [DIR] [--dir DIR] [--tc-key NAME]
   transferring). Nothing is served until this command runs.
 
   Friend side (their own clone/copy of this repo, on their machine):
-    ./ut99 deps                                   # installs tailcat
+    ./ut99 deps                                   # installs tailcat, checks python3 + wine
     mkdir -p files
     tailcat cp <tcp...>:ut99-wineprefix.tgz files/
     tailcat cp <tcp...>:ut99-wineprefix.tgz.sha256 files/

@@ -34,7 +34,7 @@ scripts/                engine scripts (all usable standalone, wrapper just driv
   client-deploy-prefix.sh       friend side: verify + extract the tarball
   host-serve-files.sh           tailcat file service (`ut99 file-serve`): share the tarball + .sha256
   client-pull-files.sh          client side (`ut99 file-pull`): fetch + verify the tarball
-  install-deps.sh               tailcat (GitHub release, sha256-checked) + python3 check
+  install-deps.sh               tailcat (GitHub release, sha256-checked) + python3 install, wine check
 helpers/ut99-env.sh     shared config (every value overridable via environment)
 files/                  pack output (gitignored)
 ```
@@ -42,7 +42,7 @@ files/                  pack output (gitignored)
 ## Quick start
 
 ```sh
-./ut99 deps                     # tailcat + python3, only if missing
+./ut99 deps                     # tailcat + python3 if missing, checks wine
 
 # Host (one terminal): starts server AND bridge, prints the tcp... address
 ./ut99 server --mode instagib --bots 4
@@ -92,7 +92,7 @@ The `file-serve` address and the `server` bridge address are two different
 | `ut99 deploy`   | Verify + extract the tarball into `WINEPREFIX`.                    |
 | `ut99 file-serve [DIR]` | Serve `DIR` (default `files/`) read-only through tailcat's file service; friends fetch with `tailcat cp`. |
 | `ut99 file-pull <tcp...>` | Client side of `file-serve`: fetch the tarball + `.sha256` into `files/` and verify (skips the download when the local copy already matches). |
-| `ut99 deps`     | Install tailcat + python3 if missing.                              |
+| `ut99 deps`     | Install tailcat + python3 if missing; check wine (prints per-distro install hints when absent). |
 | `ut99 --completion bash` | Print the bash completion script — see [Shell completion](#shell-completion). |
 
 ### Server game options
@@ -234,7 +234,7 @@ Getting the files on the client side (what each friend runs):
 
 ```sh
 # friend side, in their own clone/copy of this repo (ut99, scripts/, helpers/)
-./ut99 deps                                        # installs tailcat if missing
+./ut99 deps                                        # installs tailcat, checks python3 + wine
 ./ut99 file-pull <file-serve tcp... address>       # -> files/, checksum verified
 ./ut99 deploy                                      # extracts into WINEPREFIX
 ./ut99 client <host's bridge tcp... address>       # then play

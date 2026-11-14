@@ -2,6 +2,8 @@
 # install-deps.sh — install what ut99-socat-tailcat needs:
 #   * tailcat (latest linux binary from the GitHub release, verified with sha256)
 #   * python3 (runs the datagram-framed UDP<->TCP relay, scripts/ut99-bridge.py)
+#   * wine    (checked only, never auto-installed: runs the 32-bit Windows
+#             game binaries, UCC.exe / UnrealTournament.exe)
 #
 # tailcat is installed to ~/.local/bin (set INSTALL_BIN_DIR to change,
 # FORCE_UPDATE=1 to re-download even if tailcat is already present).
@@ -21,6 +23,23 @@ elif command -v pacman >/dev/null 2>&1; then
 else
   err "python3 is missing and pacman was not found."
   err "Install it with your distro's package manager (Debian/Ubuntu: apt install python3, Fedora: dnf install python3)."
+  exit 1
+fi
+
+# --- wine (check only: runs UCC.exe / UnrealTournament.exe) ---
+WINE_BIN="${WINE_BIN:-wine}"
+if command -v "$WINE_BIN" >/dev/null 2>&1; then
+  echo "wine: found ($WINE_BIN -> $(command -v "$WINE_BIN"), $("$WINE_BIN" --version 2>/dev/null || echo version unknown))"
+else
+  err "wine not found (checked for '$WINE_BIN' in PATH)."
+  err "UT99 469 ships 32-bit Windows binaries, so wine is required to run the game."
+  err "Install examples:"
+  err "  Ubuntu/Debian: sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine64 wine32:i386"
+  err "                 (wine32:i386 matters: 469 is a 32-bit binary)"
+  err "  Arch:          sudo pacman -S wine"
+  err "  Fedora:        sudo dnf install wine"
+  err "Or point at an existing non-system wine (Lutris/Proton) instead:"
+  err "  WINE_BIN=/path/to/wine ./ut99 deps"
   exit 1
 fi
 
