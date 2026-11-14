@@ -10,13 +10,14 @@
 # Usage:
 #   ./host-serve-files.sh                       # serve ./files (repo default)
 #   ./host-serve-files.sh ~/share               # serve another directory
-#   UT99_SERVE_DIR=~/share ./host-serve-files.sh
+#   UT99_FILE_SERVE_DIR=~/share ./host-serve-files.sh
+#   (wrapper form: ./ut99 file-serve [DIR] [--dir DIR] [--tc-key NAME])
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../helpers/ut99-env.sh"
 
-DIR="${1:-${UT99_SERVE_DIR:-$SCRIPT_DIR/../files}}"
+DIR="${1:-${UT99_FILE_SERVE_DIR:-$SCRIPT_DIR/../files}}"
 if [ ! -d "$DIR" ]; then
   echo "Error: $DIR is not a directory. Pack first: ./ut99 pack" >&2
   exit 1
@@ -32,11 +33,12 @@ fi
 echo "Serving $DIR (read-only) via tailcat's files service."
 echo "Copy the 'tcp...' address printed below and give it to your friends."
 echo
-echo "Friend side (fetch + verify + deploy):"
-echo "  tailcat cp <tcp...>:ut99-wineprefix.tgz ."
-echo "  tailcat cp <tcp...>:ut99-wineprefix.tgz.sha256 ."
-echo "  sha256sum -c ut99-wineprefix.tgz.sha256"
-echo "  ./ut99 deploy        # extracts into their WINEPREFIX"
+echo "Friend side, in their own clone/copy of this repo (fetch + verify + deploy):"
+echo "  ./ut99 deps                        # installs tailcat + socat if missing"
+echo "  mkdir -p files"
+echo "  tailcat cp <tcp...>:ut99-wineprefix.tgz files/"
+echo "  tailcat cp <tcp...>:ut99-wineprefix.tgz.sha256 files/"
+echo "  ./ut99 deploy                      # checksum + extract into WINEPREFIX"
 echo
 echo "Press Ctrl+C to stop serving."
 

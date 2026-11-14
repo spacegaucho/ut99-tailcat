@@ -138,5 +138,5 @@ du -sh "$WINEPREFIX" | sed 's/^/  prefix:   /'
 echo "  checksum: $OUT.sha256"
 echo
 echo "Send both files to your friends (any file host/scp/python http.server),"
-echo "or serve them straight from this repo over tailcat:  ./ut99 serve"
+echo "or serve them straight from this repo over tailcat:  ./ut99 file-serve"
 echo "They then run:  ./client-deploy-prefix.sh   # extracts into their WINEPREFIX"

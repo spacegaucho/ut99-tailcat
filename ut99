@@ -6,7 +6,7 @@
 #   ut99 client  [tcp...] [tunnel options]           game (+ internet bridge)
 #   ut99 bridge  host|client ...                    bridges only
 #   ut99 probe   [port]                             net-test a listening server
-#   ut99 pack / deploy / serve / deps               prefix tarball helpers
+#   ut99 pack / deploy / file-serve / deps          prefix tarball helpers
 #   ut99 help                                       this list
 #
 # Direct LAN play: `ut99 server --lan`, then clients join host-ip:7777
@@ -47,7 +47,7 @@ USAGE
                                 out of User.ini in the packed copy (key
                                 bindings and settings are kept).
   ut99 deploy  [--tgz PATH] [--prefix DIR] [--force]
-  ut99 serve   [DIR] [--tc-key NAME]
+  ut99 file-serve [DIR] [--dir DIR] [--tc-key NAME]
                                 Serve DIR (default ./files: the tgz + .sha256)
                                 read-only over tailcat's file service; friends
                                 fetch it with tailcat cp (see command help).
@@ -491,19 +491,23 @@ cmd_deploy() {
   exec "$S/client-deploy-prefix.sh"
 }
 
-cmd_serve() {
+cmd_file_serve() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --dir)    export UT99_SERVE_DIR="$2"; shift 2 ;;
+      --dir)    export UT99_FILE_SERVE_DIR="$2"; shift 2 ;;
       --tc-key) export TAILCAT_KEY="$2"; shift 2 ;;
       -h|--help) cat <<'EOF'
-ut99 serve [DIR] [--dir DIR] [--tc-key NAME]
+ut99 file-serve [DIR] [--dir DIR] [--tc-key NAME]
   Serves DIR (default: the repo's files/ directory) read-only through
-  tailcat's files service (SFTP over tailcat; scp does the transferring).
-  Friends fetch the pack with:
-    tailcat cp <tcp...>:ut99-wineprefix.tgz .
-    tailcat cp <tcp...>:ut99-wineprefix.tgz.sha256 .
-    sha256sum -c ut99-wineprefix.tgz.sha256 && ./ut99 deploy
+  tailcat's files service (SFTP over tailcat; the system scp does the
+  transferring). Nothing is served until this command runs.
+
+  Friend side (their own clone/copy of this repo, on their machine):
+    ./ut99 deps                                   # installs tailcat + socat
+    mkdir -p files
+    tailcat cp <tcp...>:ut99-wineprefix.tgz files/
+    tailcat cp <tcp...>:ut99-wineprefix.tgz.sha256 files/
+    ./ut99 deploy                                 # checksum + extract
 EOF
         exit 0 ;;
       *) break ;;
@@ -521,7 +525,7 @@ case "$cmd" in
   probe)  cmd_probe "$@" ;;
   pack)   cmd_pack "$@" ;;
   deploy) cmd_deploy "$@" ;;
-  serve)  cmd_serve "$@" ;;
+  file-serve) cmd_file_serve "$@" ;;
   deps)   exec "$S/install-deps.sh" "$@" ;;
   help|-h|--help) usage ;;
   *) err "unknown command: $cmd"; echo; usage; exit 2 ;;

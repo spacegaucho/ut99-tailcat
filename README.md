@@ -5,7 +5,7 @@ Play an Unreal Tournament 99 (GOTY) LAN game across the internet using
 point-to-point tunnel via DERP, no accounts/ports/VPN setup) bridged with
 socat, because tailcat's forwarded ports are TCP-only while UT99 speaks UDP
 (tailcat's separate built-in file service is the one exception — used by
-`ut99 serve` to share the game pack):
+`ut99 file-serve` to share the game pack):
 
 ```
 UT99 client --UDP :7777--> socat --TCP :8777--> tailcat forward
@@ -20,7 +20,7 @@ default (dead once the host stops), stable if you generate a saved key.
 ## Layout
 
 ```
-ut99                    single wrapper: server / client / bridge / probe / pack / deploy / serve / deps
+ut99                    single wrapper: server / client / bridge / probe / pack / deploy / file-serve / deps
 scripts/                engine scripts (all usable standalone, wrapper just drives them)
   host-start-server.sh          UCC dedicated server (Lutris wine install)
   host-start-bridge.sh          tailcat serve + socat TCP→UDP, prints the tcp... address
@@ -28,7 +28,7 @@ scripts/                engine scripts (all usable standalone, wrapper just driv
   client-start-ut99.sh          game client with auto-join
   host-pack-prefix.sh           pack the wine prefix into files/ut99-wineprefix.tgz (+ .sha256)
   client-deploy-prefix.sh       friend side: verify + extract the tarball
-  host-serve-files.sh           tailcat file service: share the tarball + .sha256
+  host-serve-files.sh           tailcat file service (`ut99 file-serve`): share the tarball + .sha256
   install-deps.sh               socat (pacman/apt) + tailcat (GitHub release, sha256-checked)
 helpers/ut99-env.sh     shared config (every value overridable via environment)
 files/                  pack output (gitignored)
@@ -64,7 +64,7 @@ LAN-only play: `./ut99 server --lan`, clients join `host-ip:7777`.
 | `ut99 probe [port]` | Send a net-test datagram to `127.0.0.1:port`; a reply proves server/bridge up. |
 | `ut99 pack`     | Pack the wine prefix → `files/ut99-wineprefix.tgz` + `.sha256` (scrubs your player name out of the packed copy). |
 | `ut99 deploy`   | Verify + extract the tarball into `WINEPREFIX`.                    |
-| `ut99 serve [DIR]` | Serve `DIR` (default `files/`) read-only through tailcat's file service; friends fetch with `tailcat cp`. |
+| `ut99 file-serve [DIR]` | Serve `DIR` (default `files/`) read-only through tailcat's file service; friends fetch with `tailcat cp`. |
 | `ut99 deps`     | Install socat + tailcat if missing.                                |
 
 ### Server game options
@@ -173,7 +173,7 @@ system wine):
 | `UT99_PACK_OUT`       | `files/ut99-wineprefix.tgz`                   | Pack output path; suffix picks compression |
 | `UT99_PACK_KEEP`      | *(empty)*                                     | Re-include named pack excludes, e.g. `mono,UT436` |
 | `UT99_PACK_SCRUB_TO`  | `Player`                                      | Name written into the packed `User.ini`; `''` disables name scrubbing |
-| `UT99_SERVE_DIR`      | `files/`                                      | Directory served by `ut99 serve` / `host-serve-files.sh` |
+| `UT99_FILE_SERVE_DIR` | `files/`                                      | Directory served by `ut99 file-serve` / `host-serve-files.sh` |
 | `UT99_PREFIX_TGZ`     | `files/ut99-wineprefix.tgz`                   | Tarball to deploy                     |
 | `UT99_DEPLOY_FORCE`   | `0`                                           | `1` = allow extracting over a non-empty prefix |
 
@@ -196,18 +196,45 @@ working Lutris wine prefix into a single tarball; they extract it into their
 own `WINEPREFIX` and can immediately run everything.
 
 ```sh
+# host side
 ./ut99 pack          # -> files/ut99-wineprefix.tgz (+ .sha256), ~560M
-./ut99 serve         # serves both files read-only over tailcat; copy its tcp... address
-
-# friend side (in their own clone/copy of this repo):
-tailcat cp <tcp...>:ut99-wineprefix.tgz .        # scp-like fetch with progress
-tailcat cp <tcp...>:ut99-wineprefix.tgz.sha256 .
-./ut99 deploy        # verifies the checksum, extracts into WINEPREFIX
+./ut99 file-serve    # serves both files read-only over tailcat; copy its tcp... address
 ```
 
-`ut99 serve` is tailcat's built-in SFTP-style file service rooted at `files/`
-(read-only); plain `scp`, `sftp`, a file host or `python3 -m http.server`
-work just as well if you prefer to move the two files another way.
+Getting the files on the client side (what each friend runs):
+
+```sh
+# friend side, in their own clone/copy of this repo (ut99, scripts/, helpers/)
+./ut99 deps                                        # installs tailcat + socat if missing
+mkdir -p files
+tailcat cp <tcp...>:ut99-wineprefix.tgz files/     # scp-like fetch, with progress
+tailcat cp <tcp...>:ut99-wineprefix.tgz.sha256 files/
+./ut99 deploy                                      # verifies the checksum, extracts into WINEPREFIX
+./ut99 client <host's bridge tcp... address>       # then play
+```
+
+Notes for the fetching side:
+
+- **Two different addresses**: the `file-serve` address hands over the files;
+  the `server` bridge address is what `ut99 client` connects to for the game.
+  They are separate commands, separate tailcat processes, separate `tcp...`
+  strings (both only live while the host's command runs, unless `--tc-key`
+  is used).
+- Remote paths are relative to the served directory, so plain file names are
+  enough. Put both files in `files/` — that is where `ut99 deploy` looks; any
+  other location works via `UT99_PREFIX_TGZ=~/Downloads/ut99-wineprefix.tgz ./ut99 deploy`
+  (keep the `.sha256` next to the tarball).
+- Fetching only needs `tailcat` (plus the system `scp`, which is what actually
+  moves the bytes). `-p` preserves timestamps; abort with Ctrl+C and re-run to
+  retry — `scp` restarts the file from scratch rather than resuming.
+- `ut99 deploy` checks `<tarball>.sha256` itself when it is present
+  (`sha256sum -c` is the manual equivalent, run from inside the directory that
+  holds both files). It refuses a non-empty `WINEPREFIX` unless `--force`
+  (or `UT99_DEPLOY_FORCE=1`), and points at a different prefix with
+  `--prefix DIR` / `WINEPREFIX=DIR`.
+- No tailcat on the friend's machine yet, or prefer a plain download? Serve
+  the same two files any other way: `scp`, `sftp`, a file host, or on the host
+  `python3 -m http.server -d files 8000` and `curl -O` on the client side.
 
 The pack scrubs your personal player name: inside the archive `User.ini`'s
 `[DefaultPlayer] Name` becomes `Player` and `BestPlayers[]`/`Saves[]` entries
