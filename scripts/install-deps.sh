@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 spacegaucho
+# SPDX-License-Identifier: GPL-3.0-or-later
 # install-deps.sh — install what ut99-tailcat needs:
 #   * tailcat (latest linux binary from the GitHub release, verified with sha256)
 #   * python3 (runs the datagram-framed UDP<->TCP relay, scripts/ut99-bridge.py)

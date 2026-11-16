@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 spacegaucho
+# SPDX-License-Identifier: GPL-3.0-or-later
 # host-serve-files.sh — serve the packed wine prefix tarball (+ its .sha256)
 # over tailcat's built-in file service, so friends can pull it with
 # `tailcat cp` — no web server, no ports, no accounts.

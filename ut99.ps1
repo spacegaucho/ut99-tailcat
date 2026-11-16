@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 spacegaucho
+# SPDX-License-Identifier: GPL-3.0-or-later
 # ut99.ps1 — Windows (PowerShell) wrapper for the client side of ut99-tailcat.
 # Counterpart of the bash 'ut99' wrapper; the host/server side stays on Linux.
 #

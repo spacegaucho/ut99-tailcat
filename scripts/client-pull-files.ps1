@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 spacegaucho
+# SPDX-License-Identifier: GPL-3.0-or-later
 # client-pull-files.ps1 — Windows counterpart of client-pull-files.sh: fetch
 # files from a host running 'ut99 file-serve' through tailcat's file service,
 # verify the sha256, into files/ (default).

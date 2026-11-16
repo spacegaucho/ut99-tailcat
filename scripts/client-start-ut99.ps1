@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 spacegaucho
+# SPDX-License-Identifier: GPL-3.0-or-later
 # client-start-ut99.ps1 — launch the native Windows UT99 client (OldUnreal 469
 # install) and auto-join a server.  Windows counterpart of
 # scripts/client-start-ut99.sh; extra arguments are passed to the game.

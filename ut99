@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 spacegaucho
+# SPDX-License-Identifier: GPL-3.0-or-later
 # ut99 — single wrapper for the whole project: dedicated server, game client,
 # tailcat bridges (with the datagram-framed UDP relay in scripts/ut99-bridge.py),
 # LAN-only play, prefix packing, dependency install.

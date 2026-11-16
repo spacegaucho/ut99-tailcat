@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 spacegaucho
+# SPDX-License-Identifier: GPL-3.0-or-later
 # install-deps.ps1 — install what the Windows side of ut99-tailcat needs:
 #   * tailcat.exe  (pinned release from the GitHub release page, into tools\)
 #   * python       (runs scripts/ut99-bridge.py, the SAME relay the host runs;

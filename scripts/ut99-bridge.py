@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 spacegaucho
+# SPDX-License-Identifier: GPL-3.0-or-later
 """ut99-bridge.py — datagram-preserving UDP<->TCP relay for the tailcat bridge.
 
 Why this exists:

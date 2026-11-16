@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 spacegaucho
+# SPDX-License-Identifier: GPL-3.0-or-later
 # ut99-env.ps1 — shared configuration and helpers for the Windows (PowerShell)
 # side of ut99-tailcat. Dot-sourced by ut99.ps1 and by the scripts/*.ps1.
 #

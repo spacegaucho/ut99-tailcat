@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 spacegaucho
+# SPDX-License-Identifier: GPL-3.0-or-later
 # client-start-bridge.sh — client side of the tailcat bridge.
 #
 # Chain (client side):

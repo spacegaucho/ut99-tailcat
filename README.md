@@ -203,7 +203,7 @@ on Linux/macOS and `%APPDATA%\tailcat\keys\NAME.private.json` on Windows.
 
 ## License
 
-Copyright (C) 2026 spacegaucho — SPDX-License-Identifier: GPL-3.0-only
+Copyright (C) 2026 spacegaucho — SPDX-License-Identifier: GPL-3.0-or-later
 
 This project (scripts, `ut99-bridge.py`, docs) is free software: you can
 redistribute it and/or modify it under the terms of the GNU General Public

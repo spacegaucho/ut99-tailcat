@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 spacegaucho
+# SPDX-License-Identifier: GPL-3.0-or-later
 # ut99-run.ps1 — shared run orchestration for the Windows side (internal;
 # called by ut99.ps1 and the client-start-*.ps1 entry points).
 #

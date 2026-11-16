@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 spacegaucho
+# SPDX-License-Identifier: GPL-3.0-or-later
 # client-start-bridge.ps1 — client side of the tailcat bridge (Windows).
 #
 # Chain (client side):

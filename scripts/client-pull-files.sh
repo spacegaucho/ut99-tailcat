@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 spacegaucho
+# SPDX-License-Identifier: GPL-3.0-or-later
 # client-pull-files.sh — client side of host-serve-files.sh: fetch the packed
 # wine prefix tarball (+ its .sha256) from a host's tailcat file service,
 # verify the checksum, and optionally deploy it.

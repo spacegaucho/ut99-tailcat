@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 spacegaucho
+# SPDX-License-Identifier: GPL-3.0-or-later
 # host-pack-prefix.sh — pack the UT99 wine prefix into a portable tarball so
 # friends can deploy a ready-to-play install instead of installing the game.
 #

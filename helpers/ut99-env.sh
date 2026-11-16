@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 spacegaucho
+# SPDX-License-Identifier: GPL-3.0-or-later
 # ut99-env.sh — shared configuration for all ut99-tailcat scripts.
 #
 # Sourced by the ut99 wrapper and by the scripts in scripts/.  Every value can

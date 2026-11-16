@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 spacegaucho
+# SPDX-License-Identifier: GPL-3.0-or-later
 # client-deploy-prefix.sh — unpack a ut99-wineprefix tarball into a fresh
 # WINEPREFIX so a client can immediately run the bridges and join a game.
 #

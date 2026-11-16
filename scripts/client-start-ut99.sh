@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 spacegaucho
+# SPDX-License-Identifier: GPL-3.0-or-later
 # client-start-ut99.sh — launch the UT99 game client (Lutris install) and
 # auto-join a server. Extra arguments are passed through to the game.
 #

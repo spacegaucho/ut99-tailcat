@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 spacegaucho
+# SPDX-License-Identifier: GPL-3.0-or-later
 # host-start-server.sh — start the UT99 dedicated server (Lutris wine install).
 #
 # Override via environment, e.g.:
