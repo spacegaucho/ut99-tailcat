@@ -181,6 +181,9 @@ changes (the server prints a ready-to-copy join command built from it):
 (`tailcat genkey --key ut99` creates the same key by hand, e.g. to print the
 address before ever starting a game.)
 
+Saved keys are stock tailcat key files, stored at `~/.config/tailcat/keys/NAME.private.json`
+on Linux/macOS and `%APPDATA%\tailcat\keys\NAME.private.json` on Windows.
+
 ## Documentation
 
 | Document | Contents |
