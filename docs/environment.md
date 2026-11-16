@@ -22,6 +22,7 @@ system wine):
 | `UT99_HOST_ADMIN_PORT`| `8080`                                        | Host's admin port the client forwards from (`--host-admin-port`) |
 | `MAP` / `GAME_TYPE` / `EXTRA_OPTS` | `CTF-Face` / `Botpack.CTFGame` / see server flags | Raw server URL settings |
 | `UT_AUTOJOIN`         | `1`                                           | `0` = client starts at main menu     |
+| `UT_SHOW_CONFIG`      | `0`                                           | `1` = plant the recovery marker so 469's startup wizard opens (what `ut99 client --config` sets) |
 | `UT99_LOG`            | `1`                                           | Client writes UT engine log `ut99-client.log` in `UT_DIR` (`-log … -forcelogflush`) |
 | `UT99_XVFB_RES`       | `2560x1440`                                   | Xvfb screen size used by `ut99 client` |
 | `DISABLE_UPLINKS`     | `1`                                           | Comment out master-server uplink lines (backup kept as `*.ut99bak`) |

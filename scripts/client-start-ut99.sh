@@ -15,6 +15,8 @@
 #   ./client-start-ut99.sh                    # auto-join 127.0.0.1:$UT_UDP_PORT
 #   ./client-start-ut99.sh 127.0.0.1:7779     # loopback test setup (UT_UDP_PORT=7779)
 #   UT_AUTOJOIN=0 ./client-start-ut99.sh      # no auto-join (start at main menu)
+#   UT_SHOW_CONFIG=1 ./client-start-ut99.sh   # open 469's startup wizard (video /
+#                                            # audio device choice, safe mode)
 # Alternative: launch normally with  lutris -i unreal-tournament  and use
 # Multiplayer > Join Game > Open Game > 127.0.0.1:<UT_UDP_PORT>
 set -euo pipefail
@@ -51,18 +53,37 @@ if [[ "$join_target" =~ ^127\.0\.0\.1:([0-9]+)$ ]]; then
   fi
 fi
 
-# 469 crash-recovery flag: a normal exit deletes System/Running.ini, but a
-# killed/crashed run leaves the 0-byte file behind. The next client then opens
-# the "Unreal Tournament Recovery Mode" wizard and stalls instead of joining,
-# so scrub any stale copy first.
-rm -f "$UT_DIR/Running.ini"
+# 469 crash-recovery flag: the launcher (UnrealTournament.exe) creates the
+# 0-byte System/Running.ini when it starts the engine and deletes it again on a
+# clean exit; a killed/crashed run leaves it behind.  The next start then shows
+# the "Unreal Tournament Recovery Mode" wizard and waits for you there instead
+# of joining, so a normal run scrubs any stale copy first.
+#
+# UT_SHOW_CONFIG=1 turns that behaviour into the feature: plant the marker on
+# purpose, and 469's own wizard opens — the page titled "Unreal Tournament
+# Recovery Mode" offers "Change your 3D video device" (the renderer list),
+# "Change your audio device", and the safe-mode options (no sound, no 3D video,
+# windowed, 1024x768, reset config, ...).  Whatever you pick is written to
+# UnrealTournament.ini ([Engine.Engine] GameRenderDevice / GameAudioDevice), and
+# closing the wizard the normal way removes the marker again.
+if [ "${UT_SHOW_CONFIG:-0}" = 1 ]; then
+  : > "$UT_DIR/Running.ini"
+else
+  rm -f "$UT_DIR/Running.ini"
+fi
 
 cd "$UT_DIR"
 echo "Launching UT99 from $UT_DIR (WINEPREFIX=$WINEPREFIX)"
-if [ "${#game_args[@]}" -gt 0 ]; then
+if [ "${UT_SHOW_CONFIG:-0}" = 1 ]; then
+  echo "Startup wizard: pick 'Change your 3D video device' for the renderer," >&2
+  echo "'Change your audio device' for sound, or one of the safe-mode options." >&2
+elif [ "${#game_args[@]}" -gt 0 ]; then
   echo "Auto-joining ${game_args[0]} — the join proceeds during the intro movies."
+  echo "Fallback if it fails: Multiplayer > Join Game > Open Game > 127.0.0.1:${UT_UDP_PORT}"
+else
+  echo "No auto-join: the game opens at its main menu."
+  echo "Fallback if you meant to join: Multiplayer > Join Game > Open Game > 127.0.0.1:${UT_UDP_PORT}"
 fi
-echo "Fallback if it fails: Multiplayer > Join Game > Open Game > 127.0.0.1:${UT_UDP_PORT}"
 
 # UT's own engine log (net attempts, rejections, join state) — the client-side
 # view that plain wine stdout never shows. -forcelogflush keeps it usable when

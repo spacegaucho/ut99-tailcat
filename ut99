@@ -118,6 +118,11 @@ ${B}Networking options (client)${R}
   --host-port N         Host bridge TCP port it connects to  (default 8777)
   --tc-key NAME         Saved tailcat key name (stable tcp... address; auto-created on first use)
   --no-join             Start at the main menu instead of auto-joining
+  --config              Open UT99's own startup wizard instead of joining: the
+                        "Unreal Tournament Recovery Mode" page, where you change
+                        the 3D video device (renderer), the audio device, or
+                        start in safe mode.  Needs a clickable window (no Xvfb);
+                        it starts no bridge and writes no player name.
   --admin               Open the host's web admin locally: forwards the host's
                         admin port to http://127.0.0.1:<--admin-port>/ServerAdmin/
   --admin-port N        Local port for the forwarded admin UI (default 18080)
@@ -473,6 +478,7 @@ EOF
 # ---- ut99 client ------------------------------------------------------------
 cmd_client() {
   local tc="" lan=0 join="" name="" port="" bridge_port="" host_port="" nojoin=0
+  local config=0
   local admin=0 admin_local="${UT99_ADMIN_LOCAL:-18080}" host_admin="${UT99_HOST_ADMIN_PORT:-8080}"
   local xvfb="" xvfb_res="${UT99_XVFB_RES:-2560x1440}"
   local game_args=() game_cmd=()
@@ -487,6 +493,7 @@ cmd_client() {
       --host-port) host_port="$2"; need_int --host-port "$host_port"; shift 2 ;;
       --tc-key)  export TAILCAT_KEY="$2"; shift 2 ;;
       --no-join) nojoin=1; shift ;;
+      --config)  config=1; shift ;;
       --admin)   admin=1; shift ;;
       --admin-port) admin_local="$2"; need_int --admin-port "$admin_local"; shift 2 ;;
       --host-admin-port) host_admin="$2"; need_int --host-admin-port "$host_admin"; shift 2 ;;
@@ -498,9 +505,11 @@ cmd_client() {
       -h|--help) sed -n '/^Networking options (client)/,/^Options valid/p' <<EOF
 Networking options (client)
   --lan  --join HOST:PORT  --name NAME  --port N  --bridge-port N  --host-port N
-  --tc-key NAME  --no-join  --xvfb/--no-xvfb  --xvfb-res WxH
+  --tc-key NAME  --no-join  --config  --xvfb/--no-xvfb  --xvfb-res WxH
   --admin  --admin-port N  --host-admin-port N
   -- ARGS (passed to the game)  --prefix DIR  --wine-bin PATH
+  --config: opens 469's own startup wizard (Recovery Mode page) to change the
+  3D video device / audio device or run in safe mode; needs a visible window.
 EOF
         exit 0 ;;
       --)        shift; game_args=("$@"); break ;;
@@ -514,6 +523,45 @@ EOF
   [ -n "$host_port" ] && export HOST_BRIDGE_TCP_PORT="$host_port"
   [ "$nojoin" = 1 ] && export UT_AUTOJOIN=0
 
+  if [ "$config" = 1 ]; then
+    # 469's own settings wizard: the launcher shows it when System/Running.ini
+    # is left over from a run that did not shut down cleanly, so planting that
+    # marker is what opens it (see scripts/client-start-ut99.sh).  Its first
+    # page ("Unreal Tournament Recovery Mode") offers "Change your 3D video
+    # device" (the renderer list, with "Show all devices" for the uncertified
+    # ones), "Change your audio device", and the safe-mode options.  Picks are
+    # saved into UnrealTournament.ini ([Engine.Engine] GameRenderDevice /
+    # GameAudioDevice), so the next plain 'ut99 client' simply uses them.
+    # It is a settings screen, not a game run: no join, no bridge, no admin
+    # forward, and no player-name rewrite.
+    if [ -n "$join" ]; then
+      err "ut99 client --config opens the settings wizard; it cannot join at the same time (drop --config or --join)"; exit 2
+    fi
+    if [ -n "$tc" ]; then
+      err "ut99 client --config starts no bridge (drop --config to join a tcp... address)"; exit 2
+    fi
+    if [ "$admin" = 1 ]; then
+      err "ut99 client --config starts no admin forward (use 'ut99 client <tcp...> --admin' for that)"; exit 2
+    fi
+    # The wizard is a window you have to click, and Xvfb is a hidden display:
+    # with no DISPLAY it would open where nobody can see it, so refuse instead
+    # of launching an unusable one (--xvfb overrides on purpose).
+    if [ -z "$xvfb" ] && [ -z "${DISPLAY:-}" ]; then
+      err "ut99 client --config needs a visible window to click, and DISPLAY is unset."
+      err "Run it where DISPLAY is set (your desktop), or pass --xvfb anyway to test it headlessly."
+      exit 2
+    fi
+    export UT_SHOW_CONFIG=1 UT_AUTOJOIN=0
+    local rend
+    rend="$(ini_get "$UT_DIR/UnrealTournament.ini" Engine.Engine GameRenderDevice)"
+    if [ -n "$rend" ]; then
+      err "ut99 client: startup wizard ON — current renderer: $rend ([Engine.Engine] GameRenderDevice)"
+    else
+      err "ut99 client: startup wizard ON"
+    fi
+    err "ut99 client: in the wizard choose 'Change your 3D video device' to pick a renderer, or a safe-mode option to troubleshoot"
+  fi
+
   local ut_udp_port="${UT_UDP_PORT:-7777}"
 
   # Player name: the engine reads it from [DefaultPlayer] Name in User.ini and
@@ -521,24 +569,30 @@ EOF
   # user picks it; without one we generate a throwaway Player-XXXX so ut99
   # players show up with a plain default name instead of whatever the prefix's
   # User.ini happens to contain. The engine caps PlayerName at 16 characters.
-  if [ -z "$name" ]; then
+  # --config is a settings run, not a game run: leave the prefix's own name
+  # alone unless --name says otherwise.
+  if [ "$config" = 1 ] && [ -z "$name" ]; then
+    name=""
+  elif [ -z "$name" ]; then
     name="Player-$(( 1000 + RANDOM % 9000 ))"
   fi
-  # ? and = are URL/ini option separators, ' is quote-breakage; newlines
-  # cannot occur inside a single shell argument.
-  case "$name" in
-    *[\?=\"\']*) err "invalid player name (contains ? = \" or '): $name"; exit 2 ;;
-  esac
-  if [ "${#name}" -gt 16 ]; then
-    err "player name truncated to 16 chars: ${name:0:16}"
-    name="${name:0:16}"
+  if [ -n "$name" ]; then
+    # ? and = are URL/ini option separators, ' is quote-breakage; newlines
+    # cannot occur inside a single shell argument.
+    case "$name" in
+      *[\?=\"\']*) err "invalid player name (contains ? = \" or '): $name"; exit 2 ;;
+    esac
+    if [ "${#name}" -gt 16 ]; then
+      err "player name truncated to 16 chars: ${name:0:16}"
+      name="${name:0:16}"
+    fi
+    if [ ! -f "$UT_DIR/User.ini" ]; then
+      err "note: $UT_DIR/User.ini did not exist; created it (the game fills in the rest on first save)."
+      : > "$UT_DIR/User.ini"
+    fi
+    ini_set "$UT_DIR/User.ini" DefaultPlayer Name "$name"
+    echo "Player name: $name  ([DefaultPlayer] Name in $UT_DIR/User.ini)"
   fi
-  if [ ! -f "$UT_DIR/User.ini" ]; then
-    err "note: $UT_DIR/User.ini did not exist; created it (the game fills in the rest on first save)."
-    : > "$UT_DIR/User.ini"
-  fi
-  ini_set "$UT_DIR/User.ini" DefaultPlayer Name "$name"
-  echo "Player name: $name  ([DefaultPlayer] Name in $UT_DIR/User.ini)"
 
   # Xvfb for the game window: explicit flag wins; otherwise automatic when
   # there is no DISPLAY (e.g. ssh/headless sessions). Depth is x24: Xvfb on
@@ -552,6 +606,9 @@ EOF
     command -v xvfb-run >/dev/null || { err "xvfb-run not found (install xvfb) — or use --no-xvfb to try DISPLAY=$DISPLAY directly."; exit 1; }
     game_cmd=(xvfb-run -a -s "-screen 0 ${xvfb_res}x24")
     err "Game window on Xvfb ${xvfb_res}x24 (use --no-xvfb to force your DISPLAY)."
+    if [ "$config" = 1 ]; then
+      err "note: --config under Xvfb opens the wizard on a hidden display — nothing to click there."
+    fi
   fi
 
   if [ -z "$tc" ] || [ "$lan" = 1 ]; then
@@ -765,7 +822,7 @@ _ut99_completions() {
 
   case "$sub" in
     server)     opts="--map --mode --instagib --game --mutators --opts --bots --skill --goal --time --no-ini --keep-uplinks --lan --port --bridge-port --tc-key --admin --admin-port --admin-pass --prefix --wine-bin" ;;
-    client)     opts="--lan --join --name --port --bridge-port --host-port --tc-key --no-join --admin --admin-port --host-admin-port --xvfb --no-xvfb --xvfb-res --prefix --wine-bin" ;;
+    client)     opts="--lan --join --name --port --bridge-port --host-port --tc-key --no-join --config --admin --admin-port --host-admin-port --xvfb --no-xvfb --xvfb-res --prefix --wine-bin" ;;
     bridge)     if [ "$COMP_CWORD" -eq 2 ]; then COMPREPLY=( $(compgen -W "host client" -- "$cur") ); return 0; fi
                 if [ "${COMP_WORDS[2]}" = host ]; then
                   opts="--bridge-port --port --tc-key"

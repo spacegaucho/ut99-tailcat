@@ -80,7 +80,8 @@ Part of the [ut99-tailcat](../README.md) docs.
 - **Recovery prompt after a hard kill**: 469 tracks clean exits through an
   empty `System/Running.ini` marker. If a game was SIGKILLed, the next launch
   asks how to start (normal/safe mode). Delete `Running.ini` to skip it; the
-  wrapper's own teardown leaves it only for hard crashes.
+  wrapper's own teardown leaves it only for hard crashes. To open that wizard
+  on purpose (renderer/audio choice), use `ut99 client --config`.
 - **tailcat ignores SIGTERM** (installs SIG_IGN): anything left behind by a
   crash can only be cleared with `pkill -KILL -x tailcat`.
 - **Windows binaries**: this install is already patched to OldUnreal **469**
@@ -119,7 +120,11 @@ Part of the [ut99-tailcat](../README.md) docs.
   screen is smaller, and if D3D11Drv still fails on their Intel iGPU switch
   to OpenGLDrv (safest under wine/Mesa):
   `sed -i 's/^GameRenderDevice=.*/GameRenderDevice=OpenGLDrv.OpenGLRenderDevice/' ~/wine/unreal-tournament/drive_c/UnrealTournament/System/UnrealTournament.ini`
-  (or `D3D9Drv.D3D9RenderDevice`).
+  (or `D3D9Drv.D3D9RenderDevice`). The same choice without editing the ini:
+  `./ut99 client --config` opens 469's own startup wizard — its first page
+  offers "Change your 3D video device" (renderer list, "Show all devices" for
+  uncertified ones), "Change your audio device", and the safe-mode options;
+  picks are saved into the ini, the next plain `ut99 client` uses them.
 - **Master servers**: with `DISABLE_UPLINKS=1` the server doesn't advertise
   itself to public masters (private games, no spam to mostly dead uplinks).
   Restore the `*.ut99bak` files to undo.
@@ -136,4 +141,6 @@ Part of the [ut99-tailcat](../README.md) docs.
   treats it as a crash marker — it opens the recovery wizard
   (`Startup.IDDIALOG_WizardDialog`), stalls at ~0.4% CPU and never joins. Both
   launch scripts now scrub a stale `Running.ini` before starting the game; a
-  manual `rm -f "$UT_DIR/Running.ini"` fixes it too.
+  manual `rm -f "$UT_DIR/Running.ini"` fixes it too. `ut99 client --config`
+  plants the marker deliberately to reach the wizard (video/audio device,
+  safe mode).

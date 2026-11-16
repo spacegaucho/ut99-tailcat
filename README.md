@@ -148,6 +148,7 @@ reaches the bots, and when bots spawn: [docs/ini-options.md](docs/ini-options.md
 | `--join HOST:PORT`| client         | Explicit join target                           |
 | `--name NAME`    | client          | Player name → `[DefaultPlayer] Name` in `User.ini`; default: random `Player-XXXX` (engine limit: 16 chars) |
 | `--no-join`      | client          | Start at main menu instead of auto-joining     |
+| `--config`       | client          | Open UT99's own startup wizard (choose the 3D video / audio device or safe mode) instead of playing; see [docs/troubleshooting.md](docs/troubleshooting.md) |
 | `--xvfb` / `--no-xvfb` | client   | Force/forbid Xvfb; default: automatic when `DISPLAY` is unset |
 | `--xvfb-res WxH` | client          | Xvfb screen size (default `2560x1440`, see [docs/headless.md](docs/headless.md)) |
 | `--prefix DIR`, `--wine-bin PATH` | server/client | `WINEPREFIX` / wine binary overrides |
