@@ -24,6 +24,7 @@ default (dead once the host stops), stable if you generate a saved key.
 
 ```
 ut99                    single wrapper: server / client / bridge / probe / pack / deploy / file-serve / file-pull / deps
+ut99.cmd / ut99.ps1     Windows wrapper (client side only: client / file-pull / deps) — see docs/windows.md
 scripts/                engine scripts (all usable standalone, wrapper just drives them)
   host-start-server.sh          UCC dedicated server (Lutris wine install)
   host-start-bridge.sh          tailcat serve + framed UDP relay, prints the tcp... address
@@ -32,10 +33,12 @@ scripts/                engine scripts (all usable standalone, wrapper just driv
   client-start-ut99.sh          game client with auto-join
   host-pack-prefix.sh           pack the wine prefix into files/ut99-wineprefix.tgz (+ .sha256)
   client-deploy-prefix.sh       friend side: verify + extract the tarball
-  host-serve-files.sh           tailcat file service (`ut99 file-serve`): share the tarball + .sha256
+  host-serve-files.sh           tailcat file service (`ut99 file-serve`): share the tarball + .sha256 (on its own key, ut99-files)
   client-pull-files.sh          client side (`ut99 file-pull`): fetch + verify the tarball
   install-deps.sh               tailcat (GitHub release, sha256-checked) + python3 install, wine check
+  *.ps1                         Windows client side: ut99-run, client-start-bridge, client-start-ut99, client-pull-files, install-deps
 helpers/ut99-env.sh     shared config (every value overridable via environment)
+helpers/ut99-env.ps1    Windows counterpart of ut99-env.sh
 docs/                   advanced docs: ini options, admin web API, environment variables, file sharing, headless, completion, troubleshooting
 files/                  pack output (gitignored)
 ```
@@ -86,6 +89,10 @@ files/                  pack output (gitignored)
 
 Ctrl+C anywhere stops everything that command started (bridges, server, game).
 LAN-only play: `./ut99 server --lan`, clients join `host-ip:7777`.
+
+Friend on **Windows**? Copy this repo to their machine and use `.\ut99.cmd deps` /
+`.\ut99.cmd client <tcp...>` — the native OldUnreal 469 client, no wine; see
+[docs/windows.md](docs/windows.md).
 
 `--name` writes the player name into `[DefaultPlayer] Name` in `User.ini`
 (the engine takes it from there into the join URL); omit it and the wrapper
@@ -183,5 +190,6 @@ address before ever starting a game.)
 | [docs/environment.md](docs/environment.md) | All engine environment variables with defaults (for using `scripts/` directly) |
 | [docs/sharing-files.md](docs/sharing-files.md) | Sharing the game install: pack / file-serve / file-pull / deploy details, name scrubbing, pack excludes |
 | [docs/headless.md](docs/headless.md) | Running the client headless under Xvfb (resolution/depth quirks) |
+| [docs/windows.md](docs/windows.md) | Playing as a Windows friend: `ut99.cmd` wrapper, native 469 install, deps, tailcat keys, file-pull caveats |
 | [docs/completion.md](docs/completion.md) | Bash shell completion for the wrapper |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Caveats & troubleshooting: relay vs socat, diagnosing sessions, auto-join and the intro loop, split ports, verifying players and bots, GL-lib fixes for friends, join success signature |
