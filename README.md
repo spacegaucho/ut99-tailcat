@@ -1,5 +1,9 @@
 # ut99-tailcat
 
+*Independent fan project — not affiliated with or endorsed by Tailscale Inc.,
+the tailcat authors, or Epic Games. "tailcat" and "Unreal Tournament" are
+trademarks of their respective owners, used here descriptively.*
+
 Play an Unreal Tournament 99 (GOTY) LAN game across the internet using
 [tailcat](https://github.com/tailscale/tailcat) (WireGuard-encrypted
 point-to-point tunnel via DERP, no accounts/ports/VPN setup) bridged with the
@@ -196,3 +200,17 @@ on Linux/macOS and `%APPDATA%\tailcat\keys\NAME.private.json` on Windows.
 | [docs/windows.md](docs/windows.md) | Playing as a Windows friend: `ut99.cmd` wrapper, native 469 install, deps, tailcat keys, file-pull caveats |
 | [docs/completion.md](docs/completion.md) | Bash shell completion for the wrapper |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Caveats & troubleshooting: relay vs socat, diagnosing sessions, auto-join and the intro loop, split ports, verifying players and bots, GL-lib fixes for friends, join success signature |
+
+## License
+
+Copyright (C) 2026 spacegaucho — SPDX-License-Identifier: GPL-3.0-only
+
+This project (scripts, `ut99-bridge.py`, docs) is free software: you can
+redistribute it and/or modify it under the terms of the GNU General Public
+License as published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version. See [LICENSE](LICENSE).
+
+It only *drives* third-party components under their own licenses (tailcat
+BSD-3-Clause, Python, wine, OpenSSH); the Unreal Tournament 99 game itself is
+proprietary, is never included or redistributed here, and every command
+assumes a legally purchased install.
