@@ -401,13 +401,28 @@ EOF
     if [ ! -f "$ini_file" ]; then
       err "ut99 server: no $ini_file — cannot enable web admin"
     else
-      [ -z "$admin_pass" ] && admin_pass="$(LC_ALL=C tr -dc 'a-zA-Z0-9' </dev/urandom | head -c 12)"
+      if [ -z "$admin_pass" ]; then
+        # Random login password.  Read a BOUNDED chunk: the classic
+        # 'tr </dev/urandom | head -c 12' dies here — head closes the pipe, tr
+        # gets SIGPIPE (141), pipefail turns that into a failing command
+        # substitution, and 'set -euo pipefail' silently kills the whole
+        # wrapper right after the ini-written line.
+        while [ "${#admin_pass}" -lt 12 ]; do
+          admin_pass="$(head -c 512 /dev/urandom | LC_ALL=C tr -dc 'a-zA-Z0-9')"
+        done
+        admin_pass="${admin_pass:0:12}"
+      fi
       ini_set "$ini_file" UWeb.WebServer bEnabled True
       ini_unset "$ini_file" UWeb.WebServer Listenport   # shipped lowercase twin
       ini_set "$ini_file" UWeb.WebServer ListenPort "$admin_port"
       ini_set "$ini_file" UTServerAdmin.UTServerAdmin AdminUsername admin
       ini_set "$ini_file" UTServerAdmin.UTServerAdmin AdminPassword "$admin_pass"
       export UT99_ADMIN_PORT="$admin_port"
+      # 8080 is a crowded port; the engine's WebServer would bind-fail quietly.
+      if (exec 3<>/dev/tcp/127.0.0.1/"$admin_port") 2>/dev/null; then
+        exec 3>&- 3<&-
+        err "ut99 server: warning: something already listens on 127.0.0.1:$admin_port — the web admin will likely fail to bind; pick another --admin-port"
+      fi
       err "ut99 server: web admin ON http://127.0.0.1:$admin_port/ServerAdmin/  (login: admin / $admin_pass)"
       err "ut99 server: live map/game switching, kicks and bot control — see docs/admin-api.md"
     fi
