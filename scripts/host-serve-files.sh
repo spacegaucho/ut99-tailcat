@@ -31,6 +31,7 @@ if [ ! -f "$DIR/ut99-wineprefix.tgz" ]; then
 fi
 
 echo "Serving $DIR (read-only) via tailcat's files service."
+echo "File-service tailcat key: ${TAILCAT_KEY:-<ephemeral>} (its own node; coexists with 'ut99 server')."
 echo "Copy the 'tcp...' address printed below and give it to your friends."
 echo
 echo "Friend side, in their own clone/copy of this repo (fetch + verify + deploy):"

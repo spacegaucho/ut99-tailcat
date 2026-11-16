@@ -739,6 +739,12 @@ cmd_deploy() {
 }
 
 cmd_file_serve() {
+  # The file service runs on its OWN tailcat node (saved key ut99-files,
+  # override with --tc-key or UT99_FILE_SERVE_KEY).  Two tailcat processes
+  # sharing one saved key confuse the bootstrap: a friend's tailcat cp to
+  # that address times out ("Dial: context deadline exceeded") while the
+  # game bridge's serve holds the same key.
+  export TAILCAT_KEY="${UT99_FILE_SERVE_KEY:-ut99-files}"
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --dir)    export UT99_FILE_SERVE_DIR="$2"; shift 2 ;;
@@ -748,6 +754,8 @@ ut99 file-serve [DIR] [--dir DIR] [--tc-key NAME]
   Serves DIR (default: the repo's files/ directory) read-only through
   tailcat's files service (SFTP over tailcat; the system scp does the
   transferring). Nothing is served until this command runs.
+  Uses its own tailcat key (ut99-files) so it coexists with 'ut99 server'
+  on the same machine; --tc-key or UT99_FILE_SERVE_KEY overrides.
 
   Friend side (their own clone/copy of this repo, on their machine):
     ./ut99 deps                                   # installs tailcat, checks python3 + wine

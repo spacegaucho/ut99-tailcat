@@ -30,6 +30,7 @@ system wine):
 | `UT99_PACK_KEEP`      | *(empty)*                                     | Re-include named pack excludes, e.g. `mono,UT436` |
 | `UT99_PACK_SCRUB_TO`  | `Player`                                      | Name written into the packed `User.ini`; `''` disables name scrubbing |
 | `UT99_FILE_SERVE_DIR` | `files/`                                      | Directory served by `ut99 file-serve` / `host-serve-files.sh` |
+| `UT99_FILE_SERVE_KEY` | `ut99-files`                                  | Saved tailcat key `ut99 file-serve` uses — its own node, so it coexists with `ut99 server`'s serve (`--tc-key` overrides) |
 | `UT99_FILE_PULL_DIR` | `files/`                                       | Directory `ut99 file-pull` fetches into |
 | `UT99_PREFIX_TGZ`     | `files/ut99-wineprefix.tgz`                   | Tarball to deploy                     |
 | `UT99_DEPLOY_FORCE`   | `0`                                           | `1` = allow extracting over a non-empty prefix |

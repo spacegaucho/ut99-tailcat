@@ -42,8 +42,11 @@ Notes for the fetching side:
 - **Two different addresses**: the `file-serve` address hands over the files;
   the `server` bridge address is what `ut99 client` connects to for the game.
   They are separate commands, separate tailcat processes, separate `tcp...`
-  strings (both only live while the host's command runs, unless `--tc-key`
-  is used).
+  strings. `file-serve` defaults to its own saved key (`ut99-files`, override
+  via `UT99_FILE_SERVE_KEY` or `--tc-key`): two tailcat processes sharing one
+  saved key are the same node and then `tailcat cp` to that address times
+  out. Both addresses are only live while the host's command runs (unless a
+  saved key is used).
 - Remote paths are relative to the served directory, so plain file names are
   enough. Put both files in `files/` — that is where `ut99 deploy` looks; any
   other location works via `UT99_PREFIX_TGZ=~/Downloads/ut99-wineprefix.tgz ./ut99 deploy`

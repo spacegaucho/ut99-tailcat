@@ -62,7 +62,17 @@ fi
 require_cmd tailcat scp || exit 1
 
 # tailcat cp: the system scp does the transfer, routed through tailcat.
+# Dialing a tailcat node we have not talked to yet can time out once
+# ("Dial: context deadline exceeded") while the bootstrap warms up, so a
+# failure is retried once — the first pull after a host comes up is reliable.
 tc_cp() {
+  if [ -n "$TAILCAT_KEY" ]; then
+    tailcat --key "$TAILCAT_KEY" cp "$@" && return 0
+  else
+    tailcat cp "$@" && return 0
+  fi
+  echo "tailcat cp failed; retrying once in 2 s..." >&2
+  sleep 2
   if [ -n "$TAILCAT_KEY" ]; then
     tailcat --key "$TAILCAT_KEY" cp "$@"
   else
