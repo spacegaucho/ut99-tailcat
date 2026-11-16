@@ -130,3 +130,10 @@ Part of the [ut99-tailcat](../README.md) docs.
   `Login: <name>` → `Possessed PlayerPawn` → `Join succeeded`. If HELLO never
   arrives, the tunnel path is broken; if HELLO arrives but no `Login:`, check
   the client engine log (`ut99-client.log` in `UT_DIR`).
+- **"Unreal Tournament Recovery Mode" wizard instead of joining**: 469 writes a
+  0-byte `System/Running.ini` while the game runs and deletes it on a clean
+  exit; a SIGKILL'd or crashed run leaves it behind, and the *next* client
+  treats it as a crash marker — it opens the recovery wizard
+  (`Startup.IDDIALOG_WizardDialog`), stalls at ~0.4% CPU and never joins. Both
+  launch scripts now scrub a stale `Running.ini` before starting the game; a
+  manual `rm -f "$UT_DIR/Running.ini"` fixes it too.

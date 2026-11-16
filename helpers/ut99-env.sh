@@ -30,6 +30,12 @@ export HOST_BRIDGE_TCP_PORT="${HOST_BRIDGE_TCP_PORT:-8777}"
 # (create one with: tailcat genkey --key ut99). Empty = ephemeral per-run key.
 export TAILCAT_KEY="${TAILCAT_KEY:-}"
 
+# UT99's built-in web admin (UTServerAdmin, served by [UWeb.WebServer] on
+# UT99_ADMIN_PORT). Empty here on purpose: the port is only advertised on the
+# tailcat tunnel when the server actually enabled the admin ('ut99 server
+# --admin' exports it).  See docs/admin-api.md.
+export UT99_ADMIN_PORT="${UT99_ADMIN_PORT:-}"
+
 # install-deps.sh installs tailcat into ~/.local/bin, but some distro/shell
 # setups (e.g. a fresh fish/CachyOS) do not have that directory in PATH.
 # If tailcat is installed there but not otherwise findable, extend PATH so

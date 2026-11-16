@@ -99,6 +99,13 @@ ${B}Networking options (server)${R}
   --port N              Server UDP port (default 7777); the host bridge follows
   --bridge-port N       Host bridge TCP port                (default 8777)
   --tc-key NAME         Saved tailcat key name (stable tcp... address; auto-created on first use)
+  --admin               Enable UT99's built-in web admin (UTServerAdmin) on the
+                        running server; the host bridge serves that port too, so
+                        friends can open the admin pages too.  See docs/admin-api.md
+  --admin-port N        Web admin HTTP port                 (default 8080)
+  --admin-pass PASS     Admin password (user 'admin').  Default: a random one,
+                        printed on startup.  An empty ini AdminPassword would let
+                        anyone through, so ut99 always sets one.
 
 ${B}Networking options (client)${R}
   --lan                 No bridge; join directly (default target 127.0.0.1:port)
@@ -111,6 +118,10 @@ ${B}Networking options (client)${R}
   --host-port N         Host bridge TCP port it connects to  (default 8777)
   --tc-key NAME         Saved tailcat key name (stable tcp... address; auto-created on first use)
   --no-join             Start at the main menu instead of auto-joining
+  --admin               Open the host's web admin locally: forwards the host's
+                        admin port to http://127.0.0.1:<--admin-port>/ServerAdmin/
+  --admin-port N        Local port for the forwarded admin UI (default 18080)
+  --host-admin-port N   Host's admin port (default 8080; match the server's)
   --xvfb / --no-xvfb    Force / forbid running the game under Xvfb. Default:
                         automatic when DISPLAY is unset (headless sessions).
   --xvfb-res WxH        Xvfb screen size (default 2560x1440 = the game's
@@ -258,6 +269,8 @@ cmd_server() {
   local map=CTF-Face mode=ctf insta=0 game_type="" mutators="" raw_opts=""
   local bots=4 skill=3 goal=5 time=15 lan=0 port="" bridge_port=""
   local uplinks=1 ini=1 m
+  local admin=0 admin_port="${UT99_ADMIN_PORT:-8080}" admin_pass="${UT99_ADMIN_PASS:-}"
+  local ini_file="$UT_DIR/UnrealTournament.ini"
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -277,13 +290,17 @@ cmd_server() {
       --tc-key)   export TAILCAT_KEY="$2"; shift 2 ;;
       --keep-uplinks) uplinks=0; shift ;;
       --no-ini)   ini=0; shift ;;
+      --admin)    admin=1; shift ;;
+      --admin-port) admin_port="$2"; need_int --admin-port "$admin_port"; shift 2 ;;
+      --admin-pass) admin_pass="$2"; shift 2 ;;
       --prefix)   export WINEPREFIX="$2"; shift 2 ;;
       --wine-bin) export WINE_BIN="$2"; shift 2 ;;
       -h|--help)  sed -n '/^SERVER game options/,/^Networking options (server)/p' <<EOF
 SERVER game options
   --map NAME  --mode ctf|dm|instagib|team|dom  --instagib  --game CLASS
   --mutators a,b  --opts RAW  --bots N  --skill 0-7  --goal N  --time MIN
-  --no-ini  --keep-uplinks   --lan  --port N  --bridge-port N  --tc-key NAME  --prefix DIR  --wine-bin PATH
+  --no-ini  --keep-uplinks   --lan  --port N  --bridge-port N  --tc-key NAME
+  --admin  --admin-port N  --admin-pass PASS   --prefix DIR  --wine-bin PATH
 EOF
         exit 0 ;;
       *) err "unknown server option: $1"; exit 2 ;;
@@ -352,7 +369,6 @@ EOF
     # Write the options into the ini too: they are what decides a map change
     # (server.nextmap), and they are the only way --bots and --skill reach the
     # game at all.  Keys are replaced in place; nothing else is touched.
-    local ini_file="$UT_DIR/UnrealTournament.ini"
     if [ ! -f "$ini_file" ]; then
       err "ut99 server: no $ini_file — cannot write game options (check UT_DIR/--prefix); bots/goal/time ignored"
     else
@@ -372,6 +388,28 @@ EOF
       ini_unset "$ini_file" "$sec" GoalScore
       ini_unset "$ini_file" Botpack.DeathMatchPlus GoalScore
       err "ut99 server: ini written: [Botpack.DeathMatchPlus] MinPlayers=$bots, [$sec] $goal_key=$goal TimeLimit=$time, [Botpack.ChallengeBotInfo] Difficulty=$skill (--no-ini to skip)"
+    fi
+  fi
+
+  if [ "$admin" = 1 ]; then
+    # 469 built-in web admin: UTServerAdmin served by the engine's
+    # UWeb.WebServer (HTTP Basic auth).  It controls the RUNNING match:
+    # switch map/game type, kick and ban players, mutators, server options,
+    # and the console page — which executes any server console command, e.g.
+    # 'set botpack.deathmatchplus MinPlayers N' fills the match with bots
+    # live (see docs/admin-api.md for what does and does not react live).
+    if [ ! -f "$ini_file" ]; then
+      err "ut99 server: no $ini_file — cannot enable web admin"
+    else
+      [ -z "$admin_pass" ] && admin_pass="$(LC_ALL=C tr -dc 'a-zA-Z0-9' </dev/urandom | head -c 12)"
+      ini_set "$ini_file" UWeb.WebServer bEnabled True
+      ini_unset "$ini_file" UWeb.WebServer Listenport   # shipped lowercase twin
+      ini_set "$ini_file" UWeb.WebServer ListenPort "$admin_port"
+      ini_set "$ini_file" UTServerAdmin.UTServerAdmin AdminUsername admin
+      ini_set "$ini_file" UTServerAdmin.UTServerAdmin AdminPassword "$admin_pass"
+      export UT99_ADMIN_PORT="$admin_port"
+      err "ut99 server: web admin ON http://127.0.0.1:$admin_port/ServerAdmin/  (login: admin / $admin_pass)"
+      err "ut99 server: live map/game switching, kicks and bot control — see docs/admin-api.md"
     fi
   fi
 
@@ -420,6 +458,7 @@ EOF
 # ---- ut99 client ------------------------------------------------------------
 cmd_client() {
   local tc="" lan=0 join="" name="" port="" bridge_port="" host_port="" nojoin=0
+  local admin=0 admin_local="${UT99_ADMIN_LOCAL:-18080}" host_admin="${UT99_HOST_ADMIN_PORT:-8080}"
   local xvfb="" xvfb_res="${UT99_XVFB_RES:-2560x1440}"
   local game_args=() game_cmd=()
 
@@ -433,6 +472,9 @@ cmd_client() {
       --host-port) host_port="$2"; need_int --host-port "$host_port"; shift 2 ;;
       --tc-key)  export TAILCAT_KEY="$2"; shift 2 ;;
       --no-join) nojoin=1; shift ;;
+      --admin)   admin=1; shift ;;
+      --admin-port) admin_local="$2"; need_int --admin-port "$admin_local"; shift 2 ;;
+      --host-admin-port) host_admin="$2"; need_int --host-admin-port "$host_admin"; shift 2 ;;
       --xvfb)    xvfb=1; shift ;;
       --no-xvfb) xvfb=0; shift ;;
       --xvfb-res) xvfb_res="$2"; shift 2 ;;
@@ -442,6 +484,7 @@ cmd_client() {
 Networking options (client)
   --lan  --join HOST:PORT  --name NAME  --port N  --bridge-port N  --host-port N
   --tc-key NAME  --no-join  --xvfb/--no-xvfb  --xvfb-res WxH
+  --admin  --admin-port N  --host-admin-port N
   -- ARGS (passed to the game)  --prefix DIR  --wine-bin PATH
 EOF
         exit 0 ;;
@@ -501,6 +544,11 @@ EOF
     combined_traps
     STARTED_GAME=1
     [ -n "$join" ] && game_args=("$join" "${game_args[@]}")
+    if [ "$admin" = 1 ]; then
+      # On a LAN there is nothing to forward: the host's web admin is directly
+      # reachable (the host enabled it with 'ut99 server --admin').
+      err "ut99 client: web admin at http://${join%%:*}:${host_admin}/ServerAdmin/ (ask the host for the login)"
+    fi
     job_pipe game "${game_cmd[@]+"${game_cmd[@]}"}" "$S/client-start-ut99.sh" "${game_args[@]+"${game_args[@]}"}"
     monitor_jobs
     return
@@ -521,6 +569,19 @@ EOF
   if [ "$up" != 1 ]; then
     err "client bridge never bound UDP :${ut_udp_port} — check the tcp... address and the host."
     exit 1
+  fi
+
+  if [ "$admin" = 1 ]; then
+    # Remote admin access: forward the host's web-admin port to a local port so
+    # the admin pages open in a browser here.  It runs as its OWN tailcat
+    # forward (not folded into the bridge's) and with the traps cleared, so a
+    # failure — a local port clash, or the host never enabled --admin — cannot
+    # tear down the game run; cleanup still reaps it through started_jobs.
+    ( trap - EXIT INT TERM
+      tailcat_exec forward "$tc" "${admin_local}:${host_admin}" 2>&1 \
+        | awk -v tag='[admin] ' '{print tag $0; fflush()}' ) &
+    started_jobs+=($!)
+    err "ut99 client: host web admin -> http://127.0.0.1:${admin_local}/ServerAdmin/  (host must have started with --admin; login from the host)"
   fi
 
   if [ -n "$join" ]; then
@@ -688,8 +749,8 @@ _ut99_completions() {
   esac
 
   case "$sub" in
-    server)     opts="--map --mode --instagib --game --mutators --opts --bots --skill --goal --time --no-ini --keep-uplinks --lan --port --bridge-port --tc-key --prefix --wine-bin" ;;
-    client)     opts="--lan --join --name --port --bridge-port --host-port --tc-key --no-join --xvfb --no-xvfb --xvfb-res --prefix --wine-bin" ;;
+    server)     opts="--map --mode --instagib --game --mutators --opts --bots --skill --goal --time --no-ini --keep-uplinks --lan --port --bridge-port --tc-key --admin --admin-port --admin-pass --prefix --wine-bin" ;;
+    client)     opts="--lan --join --name --port --bridge-port --host-port --tc-key --no-join --admin --admin-port --host-admin-port --xvfb --no-xvfb --xvfb-res --prefix --wine-bin" ;;
     bridge)     if [ "$COMP_CWORD" -eq 2 ]; then COMPREPLY=( $(compgen -W "host client" -- "$cur") ); return 0; fi
                 if [ "${COMP_WORDS[2]}" = host ]; then
                   opts="--bridge-port --port --tc-key"

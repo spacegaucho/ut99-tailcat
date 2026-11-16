@@ -51,6 +51,12 @@ if [[ "$join_target" =~ ^127\.0\.0\.1:([0-9]+)$ ]]; then
   fi
 fi
 
+# 469 crash-recovery flag: a normal exit deletes System/Running.ini, but a
+# killed/crashed run leaves the 0-byte file behind. The next client then opens
+# the "Unreal Tournament Recovery Mode" wizard and stalls instead of joining,
+# so scrub any stale copy first.
+rm -f "$UT_DIR/Running.ini"
+
 cd "$UT_DIR"
 echo "Launching UT99 from $UT_DIR (WINEPREFIX=$WINEPREFIX)"
 if [ "${#game_args[@]}" -gt 0 ]; then

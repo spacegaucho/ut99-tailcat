@@ -25,8 +25,20 @@ python3 "$SCRIPT_DIR/ut99-bridge.py" host \
   --udp-host 127.0.0.1 --udp-port "$UT_UDP_PORT" &
 RELAY_PID=$!
 
-echo "tailcat: serving TCP port ${BRIDGE_TCP_PORT} — share the tcp... address it prints below."
-tailcat_exec serve "$BRIDGE_TCP_PORT" &
+# When the server enabled UT99's built-in web admin ('ut99 server --admin'
+# exports UT99_ADMIN_PORT), serve that port on the same tailcat address: tailcat
+# proxies served ports straight to localhost, and the admin UI is plain HTTP, so
+# it needs no relay of its own.  Friends reach it with
+#   tailcat forward <this address> 18080:<UT99_ADMIN_PORT>
+# (which 'ut99 client <address> --admin' does for them).
+serve_ports="$BRIDGE_TCP_PORT"
+if [ -n "${UT99_ADMIN_PORT:-}" ]; then
+  serve_ports="$BRIDGE_TCP_PORT,$UT99_ADMIN_PORT"
+  echo "tailcat: also serving the web admin port ${UT99_ADMIN_PORT} (friends: ut99 client <address> --admin)"
+fi
+
+echo "tailcat: serving TCP ports ${serve_ports} — share the tcp... address it prints below."
+tailcat_exec serve "$serve_ports" &
 TAILCAT_PID=$!
 
 echo "Bridge running. Press Ctrl+C to stop."

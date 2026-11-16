@@ -36,7 +36,7 @@ scripts/                engine scripts (all usable standalone, wrapper just driv
   client-pull-files.sh          client side (`ut99 file-pull`): fetch + verify the tarball
   install-deps.sh               tailcat (GitHub release, sha256-checked) + python3 install, wine check
 helpers/ut99-env.sh     shared config (every value overridable via environment)
-docs/                   advanced docs: ini options, environment variables, file sharing, headless, completion, troubleshooting
+docs/                   advanced docs: ini options, admin web API, environment variables, file sharing, headless, completion, troubleshooting
 files/                  pack output (gitignored)
 ```
 
@@ -58,6 +58,9 @@ files/                  pack output (gitignored)
                                 # prints a SECOND tcp... address, for the files
 
 ./ut99 probe 7777               # optional: datagram ping proving server is up
+
+# [optional] in-game web admin (change map/mode, bots, kicks while running):
+./ut99 server --admin           # adds --admin to the line above; login printed at startup
 ```
 
 ### Client side (each friend's machine, plus the host player's own game)
@@ -76,6 +79,9 @@ files/                  pack output (gitignored)
 
 # on the host machine itself no address is needed (second terminal):
 ./ut99 client                   # direct LAN join, no bridge
+
+# [optional] reach the host's web admin (if the server used --admin):
+./ut99 client tcpGFwWCDL... --admin    # -> http://127.0.0.1:18080/ServerAdmin/
 ```
 
 Ctrl+C anywhere stops everything that command started (bridges, server, game).
@@ -135,6 +141,10 @@ reaches the bots, and when bots spawn: [docs/ini-options.md](docs/ini-options.md
 | `--bridge-port N`| both            | Local TCP port of the relay↔tailcat bridge (default 8777) |
 | `--host-port N`  | client          | Host bridge's TCP port it dials (default 8777) |
 | `--tc-key NAME`  | server/bridge/client | Stable `tcp...` address via a saved tailcat key (created automatically on first use) |
+| `--admin`        | server/client   | Server: enable UT99's built-in web admin on the running match (bridge serves that port too). Client: open the host's admin locally at `http://127.0.0.1:18080/ServerAdmin/` — see [docs/admin-api.md](docs/admin-api.md) |
+| `--admin-port N` | server/client   | Server: admin HTTP port (default 8080). Client: local forwarded port (default 18080) |
+| `--admin-pass PASS` | server       | Admin password (user `admin`); default: random 12-char, printed at startup |
+| `--host-admin-port N` | client   | Host's admin port to forward (default 8080; match the server's) |
 | `--join HOST:PORT`| client         | Explicit join target                           |
 | `--name NAME`    | client          | Player name → `[DefaultPlayer] Name` in `User.ini`; default: random `Player-XXXX` (engine limit: 16 chars) |
 | `--no-join`      | client          | Start at main menu instead of auto-joining     |
@@ -168,6 +178,7 @@ address before ever starting a game.)
 | Document | Contents |
 |----------|----------|
 | [docs/ini-options.md](docs/ini-options.md) | Why `--bots`/`--goal`/`--time` are written into the ini, the `--skill` config trap, bot spawn timing |
+| [docs/admin-api.md](docs/admin-api.md) | `--admin`: UT99's built-in web admin — change map/game mode live, add/remove bots, kick players, console commands, curl examples |
 | [docs/environment.md](docs/environment.md) | All engine environment variables with defaults (for using `scripts/` directly) |
 | [docs/sharing-files.md](docs/sharing-files.md) | Sharing the game install: pack / file-serve / file-pull / deploy details, name scrubbing, pack excludes |
 | [docs/headless.md](docs/headless.md) | Running the client headless under Xvfb (resolution/depth quirks) |

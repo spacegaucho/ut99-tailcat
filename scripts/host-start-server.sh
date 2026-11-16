@@ -51,6 +51,11 @@ else
   server_cmd=("$WINE_BIN" "$(basename "$ucc_exe")")
 fi
 
+# Scrub any stale 469 crash-recovery flag (see client-start-ut99.sh): a killed
+# server run leaves System/Running.ini behind and would trip the recovery
+# wizard on the next client launch on this machine.
+rm -f "$UT_DIR/Running.ini"
+
 cd "$UT_DIR"
 
 URL="${MAP}?Game=${GAME_TYPE}${EXTRA_OPTS}"
