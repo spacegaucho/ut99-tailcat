@@ -47,7 +47,8 @@ files/                  pack output (gitignored)
 ```sh
 ./ut99 deps                     # tailcat + python3 if missing, checks wine
 
-# one terminal: starts server AND bridge, prints the tcp... address
+# one terminal: starts server AND bridge, prints the tcp... address and a
+# ready-to-copy join command for your friends
 ./ut99 server --mode instagib --bots 4
 
 # [optional, once per new friend] friend has no game install yet, so the
@@ -110,11 +111,11 @@ The `file-serve` address and the `server` bridge address are two different
 | `--instagib`        | Add the InstaGib mutator to ctf/dm/team/dom         |
 | `--game CLASS`      | Override the mode mapping, e.g. `Botpack.TeamGamePlus` |
 | `--mutators a,b`    | Extra mutators → `?Mutator=a+b`                     |
-| `--bots N`          | `MinPlayers` bot fill (default 4)                   |
+| `--bots N`          | Bot fill: writes `[Botpack.DeathMatchPlus] MinPlayers` (total players incl. you; default 4) |
 | `--skill 0-7`       | Game/bot difficulty → `[Botpack.ChallengeBotInfo] Difficulty` (0-3 novice, 4-7 not, default 3) |
-| `--goal N`          | `GoalScore` (default 5)                             |
-| `--time MIN`        | `TimeLimit` in minutes (default 15)                 |
-| `--no-ini`          | Don't write those three into `UnrealTournament.ini` (see [docs/ini-options.md](docs/ini-options.md)) |
+| `--goal N`          | Frag/Team-score goal (default 5) → `FragLimit` in dm modes, `GoalTeamScore` in ctf/team/dom |
+| `--time MIN`        | `TimeLimit` in minutes (default 15; passed as `?TimeLimit=` and into the ini) |
+| `--no-ini`          | Don't write MinPlayers/goal/time/skill into `UnrealTournament.ini` — the engine then takes them from the existing ini only (see [docs/ini-options.md](docs/ini-options.md)) |
 | `--opts RAW`        | Full raw URL options, overrides all assembly above (and skips the ini writes) |
 | `--keep-uplinks`    | Do NOT comment out master-server uplink lines       |
 
@@ -133,7 +134,7 @@ reaches the bots, and when bots spawn: [docs/ini-options.md](docs/ini-options.md
 | `--port N`       | server/client   | UT UDP port (server default 7777; also sets the join URL `?port=` so UCC rebinds) |
 | `--bridge-port N`| both            | Local TCP port of the relay↔tailcat bridge (default 8777) |
 | `--host-port N`  | client          | Host bridge's TCP port it dials (default 8777) |
-| `--tc-key NAME`  | server/bridge/client | Saved tailcat key for a stable `tcp...` address |
+| `--tc-key NAME`  | server/bridge/client | Stable `tcp...` address via a saved tailcat key (created automatically on first use) |
 | `--join HOST:PORT`| client         | Explicit join target                           |
 | `--name NAME`    | client          | Player name → `[DefaultPlayer] Name` in `User.ini`; default: random `Player-XXXX` (engine limit: 16 chars) |
 | `--no-join`      | client          | Start at main menu instead of auto-joining     |
@@ -149,14 +150,18 @@ The flags map onto environment variables (`WINEPREFIX`, `UT_UDP_PORT`,
 ## Stable address (recommended)
 
 Without a saved key every run generates a fresh keypair and the address takes
-a minute+ to bootstrap. Generate one once — the address then never changes:
+a minute+ to bootstrap. `--tc-key NAME` uses a saved key and **creates it
+automatically on the first run**; the address derived from it then never
+changes (the server prints a ready-to-copy join command built from it):
 
 ```sh
-tailcat genkey --key ut99        # once; prints the stable tcp... address,
+./ut99 server --tc-key ut99      # first run: generates the key + prints the stable tcp... address
                                  # stores ~/.config/tailcat/keys/ut99.private.json
-./ut99 server --tc-key ut99      # bridge comes up in ~3 s, same address every time
-./ut99 client <that address> --tc-key ut99
+./ut99 client <that address>     # friends; same address every restart
 ```
+
+(`tailcat genkey --key ut99` creates the same key by hand, e.g. to print the
+address before ever starting a game.)
 
 ## Documentation
 

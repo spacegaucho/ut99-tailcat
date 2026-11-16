@@ -30,6 +30,15 @@ export HOST_BRIDGE_TCP_PORT="${HOST_BRIDGE_TCP_PORT:-8777}"
 # (create one with: tailcat genkey --key ut99). Empty = ephemeral per-run key.
 export TAILCAT_KEY="${TAILCAT_KEY:-}"
 
+# install-deps.sh installs tailcat into ~/.local/bin, but some distro/shell
+# setups (e.g. a fresh fish/CachyOS) do not have that directory in PATH.
+# If tailcat is installed there but not otherwise findable, extend PATH so
+# require_cmd/'tailcat_exec' work without the user editing their shell config.
+UT99_BIN_DIR="${INSTALL_BIN_DIR:-$HOME/.local/bin}"
+if ! command -v tailcat >/dev/null 2>&1 && [ -x "$UT99_BIN_DIR/tailcat" ]; then
+  export PATH="$PATH:$UT99_BIN_DIR"
+fi
+
 # --- helpers -----------------------------------------------------------------
 
 require_cmd() {
@@ -68,8 +77,16 @@ find_ci() {
 # 'exec' makes the backgrounded subshell (cmd &) *become* tailcat, so the
 # job pid cleanup kills refers to is the real tailcat process, not a bash
 # wrapper that would leave tailcat orphaned.
+# tailcat --key NAME loads CONFIG/tailcat/keys/NAME.private.json and errors
+# out if the file is missing, so a first-time named key is generated here
+# once — from then on the tcp... address derived from it stays the same.
 tailcat_exec() {
   if [ -n "$TAILCAT_KEY" ]; then
+    local keyfile="${XDG_CONFIG_HOME:-$HOME/.config}/tailcat/keys/$TAILCAT_KEY.private.json"
+    if [ ! -f "$keyfile" ]; then
+      echo "tailcat: generating saved key '$TAILCAT_KEY' (first run, its tcp... address is now stable)"
+      tailcat genkey --key "$TAILCAT_KEY" || { echo "tailcat: genkey --key $TAILCAT_KEY failed" >&2; return 1; }
+    fi
     exec tailcat --key "$TAILCAT_KEY" "$@"
   else
     exec tailcat "$@"
@@ -119,6 +136,22 @@ ini_set() {
     }
     END {
       if (!done) { print ""; print sec crlf; print kv crlf }
+    }
+  ' "$file" > "$file.ut99tmp" && mv "$file.ut99tmp" "$file"
+}
+
+# ini_unset <ini-file> <Section> <Key> — delete one key from an ini section.
+# No-op when the section or the key is missing; touches nothing else.
+ini_unset() {
+  local file="$1" section="$2" key="$3"
+  awk -v sec="[$section]" -v key="$key" '
+    BEGIN { insec = 0 }
+    {
+      line = $0; sub(/\r$/, "", line)
+      if (line == sec) { insec = 1; print $0; next }
+      if (insec && line ~ /^\[/) insec = 0
+      if (insec && line ~ "^" key "=") next
+      print $0
     }
   ' "$file" > "$file.ut99tmp" && mv "$file.ut99tmp" "$file"
 }

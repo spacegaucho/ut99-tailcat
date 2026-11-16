@@ -80,15 +80,17 @@ ${B}SERVER game options${R}
   --bots N              Bot fill up to N players            (default 4)
   --skill 0-7           Game/bot difficulty written to [Botpack.ChallengeBotInfo]
                         0-3 = novice mode, 4-7 = same levels without it (default 3)
-  --goal N              GoalScore                           (default 5)
+  --goal N              Score goal: FragLimit in dm modes, GoalTeamScore in
+                        team modes (default 5)
   --time MIN            TimeLimit in minutes                (default 15)
-  --no-ini              Don't write the four options below into UnrealTournament.ini
-                        NOTE: the engine reads MinPlayers/GoalScore/TimeLimit from
-                        the game type's ini section and bot Difficulty from
-                        [Botpack.ChallengeBotInfo] — not from URL options.  ut99
-                        writes them there by default, which is why --bots and
-                        --skill work at all.
-  --opts RAW            Full raw URL options, e.g. '?GoalScore=10?Game=...'
+  --no-ini              Don't write the game options into UnrealTournament.ini
+                        NOTE: ut99 writes --bots/--goal/--time/--skill into the
+                        ini, and only --goal/--time also reach the map URL (as
+                        ?FragLimit/?TimeLimit, the only game options a Botpack
+                        game class reads from a URL).  --bots has no URL option:
+                        MinPlayers is a globalconfig key of [Botpack.DeathMatchPlus].
+                        With --no-ini, --bots and --skill do nothing at all.
+  --opts RAW            Full raw URL options, e.g. '?FragLimit=10?TimeLimit=20'
                         — overrides ALL of the above assembly (incl. ini writes)
   --keep-uplinks        Do NOT comment out master-server uplink lines
 
@@ -96,7 +98,7 @@ ${B}Networking options (server)${R}
   --lan                 Server only, no bridges (plain LAN game on UDP 7777)
   --port N              Server UDP port (default 7777); the host bridge follows
   --bridge-port N       Host bridge TCP port                (default 8777)
-  --tc-key NAME         Saved tailcat key name (stable tcp... address)
+  --tc-key NAME         Saved tailcat key name (stable tcp... address; auto-created on first use)
 
 ${B}Networking options (client)${R}
   --lan                 No bridge; join directly (default target 127.0.0.1:port)
@@ -107,7 +109,7 @@ ${B}Networking options (client)${R}
   --port N              Local UDP port the client uses/joins (default 7777)
   --bridge-port N       Client-side bridge TCP port          (default 8777)
   --host-port N         Host bridge TCP port it connects to  (default 8777)
-  --tc-key NAME         Saved tailcat key name (stable tcp... address)
+  --tc-key NAME         Saved tailcat key name (stable tcp... address; auto-created on first use)
   --no-join             Start at the main menu instead of auto-joining
   --xvfb / --no-xvfb    Force / forbid running the game under Xvfb. Default:
                         automatic when DISPLAY is unset (headless sessions).
@@ -140,6 +142,42 @@ kill_tree() {   # kill_tree <pid> <TERM|KILL>
   kill -"$sig" "$pid" 2>/dev/null || true
 }
 
+# NOTE: 'pgrep/pkill -x' matches the kernel comm, which is truncated to 15
+# chars — 'UnrealTournament.exe' shows up as 'UnrealTournamen'.  Match that
+# plus the full command line ('-f'), which our own scripts' cmdlines never contain.
+#
+# '-g 0' limits every kill to OUR OWN process group.  Wine re-parents the game
+# to init (wineserver adopts it) but the group is inherited from us, so a
+# group-scoped kill still reaches it — while leaving a second ut99 run's game
+# alone.  That matters on one machine: a loopback test's server and client
+# share the same wine prefix, and the client's cleanup must not end the
+# server's match.
+wine_kill() {   # wine_kill <TERM|KILL>
+  pkill "$1" -g 0 -x UCC.exe 2>/dev/null || true
+  pkill "$1" -g 0 -x UnrealTournamen 2>/dev/null || true
+  pkill "$1" -g 0 -f 'UnrealTournament\.exe' 2>/dev/null || true
+  pkill "$1" -g 0 -x wineserver 2>/dev/null || true
+}
+wine_alive() {  # wine_alive [group] — machine-wide, or only our own group
+  local g=""
+  [ "${1:-}" = group ] && g="-g 0"
+  pgrep $g -x UCC.exe >/dev/null 2>&1 \
+    || pgrep $g -x UnrealTournamen >/dev/null 2>&1 \
+    || pgrep $g -f 'UnrealTournament\.exe' >/dev/null 2>&1
+}
+# other_ut99_alive — is another ut99 wrapper running in a DIFFERENT process
+# group (the other side of a loopback test)?  Our own wrapper and its job
+# subshells share our group and do not count.
+other_ut99_alive() {
+  local mine other p
+  mine="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ')"
+  for p in $(pgrep -f 'ut99 (server|client|bridge)' 2>/dev/null); do
+    other="$(ps -o pgid= -p "$p" 2>/dev/null | tr -d ' ')"
+    [ -n "$other" ] && [ "$other" != "$mine" ] && return 0
+  done
+  return 1
+}
+
 combined_cleanup() {
   err "Stopping ut99 processes..."
   local job
@@ -157,31 +195,30 @@ combined_cleanup() {
   if [ "$STARTED_BRIDGE" = 1 ]; then
     pkill -KILL -g 0 -x tailcat 2>/dev/null || true
   fi
-  # NOTE: 'pgrep/pkill -x' matches the kernel comm, which is truncated to 15
-  # chars — 'UnrealTournament.exe' can never match. Use the truncated comm
-  # plus a cmdline match ('-f'), which our own scripts' cmdlines never contain.
-  wine_alive() {
-    pgrep -x UCC.exe >/dev/null 2>&1 \
-      || pgrep -x UnrealTournam >/dev/null 2>&1 \
-      || pgrep -f 'UnrealTournament\.exe' >/dev/null 2>&1
-  }
-  if { [ "$STARTED_SERVER" = 1 ] || [ "$STARTED_GAME" = 1 ]; } && wine_alive; then
-    # UCC.exe/game are children of wineserver, not of our jobs: ask wineserver
-    # to end its clients gracefully, then force.
-    pkill -TERM -x UCC.exe 2>/dev/null || true
-    pkill -TERM -x UnrealTournam 2>/dev/null || true
-    pkill -TERM -f 'UnrealTournament\.exe' 2>/dev/null || true
-    pkill -TERM -x wineserver 2>/dev/null || true
+  if [ "$STARTED_SERVER" = 1 ] || [ "$STARTED_GAME" = 1 ]; then
+    wine_kill TERM
     sleep 1.5
-    pkill -KILL -x UCC.exe 2>/dev/null || true
-    pkill -KILL -x UnrealTournam 2>/dev/null || true
-    pkill -KILL -f 'UnrealTournament\.exe' 2>/dev/null || true
-    pkill -KILL -x wineserver 2>/dev/null || true
+    wine_kill KILL
+    # A game is still running and it is not in our group: some run of ours (or
+    # of an older version) escaped cleanup.  Kill it machine-wide, but never
+    # while another ut99 run on this machine may still be playing.
+    if wine_alive && ! other_ut99_alive; then
+      err "cleaning up stray UT processes"
+      pkill -KILL -x UCC.exe 2>/dev/null || true
+      pkill -KILL -x UnrealTournamen 2>/dev/null || true
+      pkill -KILL -f 'UnrealTournament\.exe' 2>/dev/null || true
+      pkill -KILL -x wineserver 2>/dev/null || true
+    fi
   fi
 }
 combined_traps() { trap combined_cleanup EXIT INT TERM; }
 
 # job_pipe <label> <cmd...> — run a child, prefix its output, background it
+# NOTE: the backgrounded subshell intentionally INHERITS our EXIT trap: when
+# one job of a combined run dies (game leaves, bridge drops), its trap runs
+# combined_cleanup inside the subshell and tears down the sibling job right
+# away.  That is why 'Stopping ut99 processes...' can show up twice — the
+# cleanup is idempotent, so running it a second time is harmless.
 started_jobs=()
 job_pipe() {
   local label="$1"; shift
@@ -194,11 +231,24 @@ job_pipe() {
 # trap cleans up the other). Polls instead of 'wait' because bash defers
 # trapped signals inside plain 'wait'.
 monitor_jobs() {
-  local pids p alive
+  local pids p alive miss=0
   while :; do
     pids=($(jobs -p)); alive=0
     for p in "${pids[@]}"; do kill -0 "$p" 2>/dev/null && { alive=1; break; }; done
     [ "$alive" = 1 ] || break
+    # Wine pipe-leak guard: wine's persistent services.exe inherits the game's
+    # stdout, so its end of our output pipeline stays open after the game
+    # itself dies (crash, disconnect, or the other side of a loopback test).
+    # The job would then live forever and make 'ut99 server' look like the
+    # match were still running.  Once a game run has definitively lost its
+    # game process, treat the jobs as finished after a short grace period
+    # (long enough for wine to spawn UCC.exe / the game at startup).
+    if { [ "$STARTED_SERVER" = 1 ] || [ "$STARTED_GAME" = 1 ]; } && ! wine_alive group; then
+      miss=$((miss+1))
+      [ "$miss" -ge 6 ] && break
+    else
+      miss=0
+    fi
     sleep 1
   done
 }
@@ -260,18 +310,36 @@ EOF
     for m in "${m[@]}"; do [ -n "$m" ] && mut+=("$m"); done
   fi
 
+  # ini section + goal key for this game class, checked against the shipped
+  # 469 Botpack sources (Botpack/DeathMatchPlus.uc, TeamGamePlus.uc, CTFGame.uc):
+  #   MinPlayers  globalconfig, declared in DeathMatchPlus  -> the engine only
+  #               ever reads it from [Botpack.DeathMatchPlus], never from a URL.
+  #   TimeLimit   config, declared in DeathMatchPlus        -> plain config keys
+  #   FragLimit   config, declared in DeathMatchPlus           are read from the
+  #               section of the class actually running the game.
+  #   GoalTeamScore config float, declared in TeamGamePlus  -> goal key of the
+  #               team games; CTFGame.InitGame() hard-sets FragLimit = 0.
+  # DeathMatchPlus.InitGame() parses only FragLimit/TimeLimit/MaxCommanders
+  # (+CoopWeaponMode, Tournament) out of the map URL — --bots/--skill have no
+  # URL option at all and work through the ini block below.
+  local sec="$game_type"
+  [[ "$sec" == *.* ]] || sec="Botpack.$sec"   # ini sections are package-qualified
+  local fam=dm goal_key=FragLimit
+  case "$sec" in
+    Botpack.CTFGame|Botpack.TeamGamePlus|Botpack.Domination|Botpack.Assault)
+      fam=team goal_key=GoalTeamScore ;;
+  esac
+
   local extra=""
   if [ -n "$raw_opts" ]; then
     extra="$raw_opts"                       # full passthrough wins
   else
     [ "${#mut[@]}" -gt 0 ] && extra+="?Mutator=$(IFS=+; echo "${mut[*]}")"
-    # MinPlayers/GoalScore/TimeLimit are `globalconfig` in the game classes —
-    # the engine reads them from UnrealTournament.ini, NOT from the URL (a
-    # ?MinPlayers= URL option is silently ignored).  With ini writing on we
-    # put 0 in the URL so the ini value is the only thing in effect.
-    local ini_minplayers="$bots"
-    [ "$ini" = 1 ] && ini_minplayers=0
-    extra+="?MinPlayers=$ini_minplayers?GoalScore=$goal?TimeLimit=$time?Difficulty=$skill"
+    # ?TimeLimit and ?FragLimit (DM family only) are the options the game class
+    # really reads.  URL options apply to the map being started only, so the
+    # same numbers are written into the ini below and survive a map change.
+    extra+="?TimeLimit=$time"
+    [ "$fam" = dm ] && extra+="?FragLimit=$goal"
   fi
   if [ -n "$port" ]; then
     export UT_UDP_PORT="$port"
@@ -281,24 +349,29 @@ EOF
   export MAP="$map" GAME_TYPE="$game_type" EXTRA_OPTS="$extra" DISABLE_UPLINKS="$uplinks"
 
   if [ "$ini" = 1 ] && [ -z "$raw_opts" ]; then
-    # Write the game options into the game-type's ini section — the only
-    # place the engine actually reads them (e.g. [Botpack.CTFGame]
-    # MinPlayers=4).  Keys are replaced in place; nothing else is touched.
-    local ini_file="$UT_DIR/UnrealTournament.ini" sec="$game_type"
+    # Write the options into the ini too: they are what decides a map change
+    # (server.nextmap), and they are the only way --bots and --skill reach the
+    # game at all.  Keys are replaced in place; nothing else is touched.
+    local ini_file="$UT_DIR/UnrealTournament.ini"
     if [ ! -f "$ini_file" ]; then
       err "ut99 server: no $ini_file — cannot write game options (check UT_DIR/--prefix); bots/goal/time ignored"
     else
-      # ini sections are named with the package-qualified class; `--game CTFGame`
-      # still resolves to Botpack.CTFGame at runtime, so qualify it here.
-      [[ "$sec" == *.* ]] || sec="Botpack.$sec"
-      ini_set "$ini_file" "$sec" MinPlayers "$bots"
-      ini_set "$ini_file" "$sec" GoalScore "$goal"
+      # MinPlayers goes to [Botpack.DeathMatchPlus] whatever the mode is,
+      # because that is where the property is declared and it is `globalconfig`
+      # (measured: [Botpack.CTFGame] MinPlayers=4 was ignored, ngLog logged
+      # MultiPlayerBots False = MinPlayers 0, and no bot ever spawned).
+      ini_set "$ini_file" Botpack.DeathMatchPlus MinPlayers "$bots"
       ini_set "$ini_file" "$sec" TimeLimit "$time"
+      ini_set "$ini_file" "$sec" "$goal_key" "$goal"
       # Bot skill: SpawnBot() re-reads `Difficulty = BotConfig.Difficulty` for
       # every bot, so the only value that matters is ChallengeBotInfo's ini key
       # (0..3 novice levels, 4..7 the same levels without novice mode).
       ini_set "$ini_file" Botpack.ChallengeBotInfo Difficulty "$skill"
-      err "ut99 server: ini options written to [$sec]: MinPlayers=$bots GoalScore=$goal TimeLimit=$time; [Botpack.ChallengeBotInfo] Difficulty=$skill (--no-ini to skip)"
+      # GoalScore is not a property of any shipped game class (the real keys are
+      # FragLimit and GoalTeamScore); drop it where older ut99 versions wrote it.
+      ini_unset "$ini_file" "$sec" GoalScore
+      ini_unset "$ini_file" Botpack.DeathMatchPlus GoalScore
+      err "ut99 server: ini written: [Botpack.DeathMatchPlus] MinPlayers=$bots, [$sec] $goal_key=$goal TimeLimit=$time, [Botpack.ChallengeBotInfo] Difficulty=$skill (--no-ini to skip)"
     fi
   fi
 
@@ -308,15 +381,39 @@ EOF
   STARTED_SERVER=1
   if [ "$lan" = 1 ]; then
     job_pipe server "$S/host-start-server.sh"
+    # Primary IPv4 of this machine (the 'src' of the default route) — the
+    # address LAN friends have to type.
+    local lip
+    lip="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([^ ]*\).*/\1/p' | head -1)"
+    echo "LAN game on UDP :${UT_UDP_PORT}. Friends on the same network join with:"
+    echo "  ./ut99 client --lan --join ${lip:-<server-ip>}:${UT_UDP_PORT}"
+    echo "(from this same machine:  ./ut99 client --lan)"
     monitor_jobs
     return
   fi
 
   STARTED_BRIDGE=1
   job_pipe server "$S/host-start-server.sh"
-  job_pipe bridge "$S/host-start-bridge.sh"
-  echo "Combined mode: server + tailcat bridge. Share the printed tcp... address;"
-  echo "friends run:  ut99 client <tcp...>   (you:  ut99 client). Ctrl+C stops both."
+  # Same job_pipe pattern (prefixed output), but the awk additionally watches
+  # for tailcat's 'listening ... address: tcp...' line and prints a ready-to-
+  # copy join command built from the address tailcat actually generated.
+  ( "$S/host-start-bridge.sh" 2>&1 \
+    | awk -v tag='[bridge] ' -v key="$TAILCAT_KEY" '
+        { print tag $0; fflush() }
+        !found && /listening with/ {
+          for (i = 1; i <= NF; i++)
+            if ($i ~ /^tcp[A-Za-z0-9_-]+$/) { addr = $i; found = 1 }
+          if (found) {
+            print tag "Friends join with:"
+            print tag "  ./ut99 client " addr
+            if (key != "")
+              print tag "(pass --tc-key " key " again to get this same address back on restart)"
+            print tag "You (this machine):  ./ut99 client"
+            fflush()
+          }
+        }' ) &
+  started_jobs+=($!)
+  echo "Combined mode: server + tailcat bridge. Ctrl+C stops both."
   monitor_jobs
 }
 

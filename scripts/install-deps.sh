@@ -89,7 +89,13 @@ else
   dl_url="$(printf '%s\n' "$api_json" | grep -oE 'https://github\.com/[^"]*tailcat_[0-9.]+_linux_'"${tc_arch}"'\.tar\.gz' | head -1)"
   [ -n "$dl_url" ] || { err "no linux ${tc_arch} tar.gz found in the latest tailcat release"; exit 1; }
 
-  tmp="$(mktemp -d /tmp/opencode/tailcat-install.XXXXXX)"
+  # Stage under the XDG cache (override with UT99_TMP_DIR).  A fixed /tmp path
+  # failed on systems where it does not exist / is not writable (e.g. a fresh
+  # CachyOS), which mktemp reports as a cryptic mktemp error.
+  stage="${UT99_TMP_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/ut99-tailcat}"
+  mkdir -p "$stage" \
+    || { err "cannot create staging dir $stage — point UT99_TMP_DIR at a writable directory"; exit 1; }
+  tmp="$(mktemp -d "$stage/tailcat-install.XXXXXX")"
   trap 'rm -rf "$tmp"' EXIT
 
   echo "Downloading $dl_url"
@@ -117,6 +123,15 @@ else
   mkdir -p "$INSTALL_BIN_DIR"
   install -m 0755 "$bin" "$INSTALL_BIN_DIR/tailcat"
   echo "tailcat: installed to $INSTALL_BIN_DIR/tailcat ($("$INSTALL_BIN_DIR/tailcat" version 2>/dev/null || echo version unknown))"
+  case ":$PATH:" in
+    *":$INSTALL_BIN_DIR:"*) ;;
+    *)
+      echo "warning: $INSTALL_BIN_DIR is NOT in your PATH — 'tailcat' won't be found by name."
+      echo "  bash/zsh:  echo 'export PATH=\"$INSTALL_BIN_DIR:\$PATH\"' >> ~/.bashrc   (then re-login)"
+      echo "  fish:      set -U fish_user_paths $INSTALL_BIN_DIR \$fish_user_paths"
+      echo "  (the ut99 wrapper and scripts find tailcat there automatically anyway)"
+      ;;
+  esac
 fi
 
 echo "Done. Dependencies OK."

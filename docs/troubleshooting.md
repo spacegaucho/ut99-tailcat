@@ -67,8 +67,12 @@ Part of the [ut99-tailcat](../README.md) docs.
   # 28.59 player IsABot  1 True                 /  three bots, Skill 3
   ```
 
-  No bots at all? Check `MinPlayers` in the game type's ini section (see
+  No bots at all? Check `MinPlayers` — it is `globalconfig`, so it lives in
+  `[Botpack.DeathMatchPlus]` whatever the game mode, not in the game type's own
+  section (see
   [ini options](ini-options.md#why---bots--goal--time-are-written-into-the-ini)).
+  The `ut99 server` wrapper writes all of this correctly by default (`--no-ini`
+  skips that).
   Bots that feel the same difficulty no matter what `--skill` does? That is normal
   in the logged numbers (bot pawns default to `Skill 3` and the value is clamped);
   the ini key drives the novice flag instead. See the `--skill` note in

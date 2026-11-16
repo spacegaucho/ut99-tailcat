@@ -75,6 +75,7 @@ class Pump:
     def __init__(self, sel, tcp, udp_send, idle_timeout):
         self.sel = sel
         self.tcp = tcp
+        self.udp = None                   # host-side: the session's UDP socket
         self.udp_send = udp_send          # callable(payload) for UDP replies
         self.tcp.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.tcp.setblocking(False)
@@ -88,14 +89,22 @@ class Pump:
         if not self.alive:
             return
         self.alive = False
-        try:
-            self.sel.unregister(self.tcp)
-        except Exception:
-            pass
-        try:
-            self.tcp.close()
-        except OSError:
-            pass
+        # Unregister BEFORE close(): a closed socket's fileno() is -1, so the
+        # selector would keep the stale fd mapping forever. The next socket
+        # created then reuses that freed fd and sel.register() explodes with
+        # "'... (FD 6) is already registered'" (seen after a client
+        # disconnected and the next join crashed the host relay).
+        for sock in (self.tcp, self.udp):
+            if sock is None:
+                continue
+            try:
+                self.sel.unregister(sock)
+            except Exception:
+                pass
+            try:
+                sock.close()
+            except OSError:
+                pass
         if why:
             log(f"session closed: {why}")
 
@@ -148,7 +157,7 @@ def run_host(args):
     lsock.listen(16)
     lsock.setblocking(False)
     sel.register(lsock, selectors.EVENT_READ, ("accept", None))
-    sessions = []  # (Pump, udp_socket)
+    sessions = []  # live Pump objects (each owns its tcp + udp socket)
     log(f"host relay: TCP {args.tcp_bind}:{args.tcp_port} -> "
         f"UDP {args.udp_host}:{args.udp_port} (+query port) [framed]")
 
@@ -209,7 +218,8 @@ def run_host(args):
         udp.setblocking(False)
         pump = Pump(sel, tcp, udp.send, args.idle_timeout)
         pump.buf = buf  # bytes already read past OPEN
-        sessions.append((pump, udp))
+        pump.udp = udp  # Pump.close() unregisters + closes it with the session
+        sessions.append(pump)
         sel.register(udp, selectors.EVENT_READ, ("udp", pump))
         # DATA frames that arrived right behind OPEN:
         for typ, payload in pop_frames(pump.buf):
@@ -238,11 +248,9 @@ def run_host(args):
                     continue
                 pump.forward_udp(payload)
         now = time.monotonic()
-        for pump, udp in sessions:
-            pump.check_idle(now)
-            if not pump.alive:
-                udp.close()
-        sessions[:] = [(p, u) for p, u in sessions if p.alive]
+        for pump in sessions:
+            pump.check_idle(now)  # close() unregisters + closes both sockets
+        sessions[:] = [p for p in sessions if p.alive]
 
 
 def run_client(args):
