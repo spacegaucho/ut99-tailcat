@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 spacegaucho
 # SPDX-License-Identifier: GPL-3.0-or-later
-# ut99-run.ps1 — shared run orchestration for the Windows side (internal;
+# ut99-run.ps1 -- shared run orchestration for the Windows side (internal;
 # called by ut99.ps1 and the client-start-*.ps1 entry points).
 #
 # It is the PowerShell counterpart of the bash wrapper's job_pipe +
@@ -107,7 +107,7 @@ function Start-GameJob {
   }
   $gargs = @()
   # The game joins the LOCAL relay port (or an explicit --join target); the
-  # tcp... tailcat address never goes to the game — only to the bridge.
+  # tcp... tailcat address never goes to the game -- only to the bridge.
   if ($env:UT_AUTOJOIN -ne "0") {
     $join = if ($JoinTarget) { $JoinTarget } else { "127.0.0.1:$env:UT_UDP_PORT" }
     $gargs += $join
@@ -149,7 +149,7 @@ try {
   if ($Mode -in "game", "client") {
     if ($Mode -eq "client" -and $env:UT_ADMIN_FORWARD -eq "1") {
       # Same design as the bash wrapper: its OWN tailcat forward that is NOT
-      # watched for exit — a failure (local port clash, host without --admin)
+      # watched for exit -- a failure (local port clash, host without --admin)
       # must not tear down the game run.  Cleanup still reaps it.
       $tc_addr = if ($Address) { $Address } else { $env:TAILCAT_ADDR }
       $adminJob = Start-TailcatJob @("forward", $tc_addr, "${env:UT99_ADMIN_LOCAL}:${env:UT99_HOST_ADMIN_PORT}")

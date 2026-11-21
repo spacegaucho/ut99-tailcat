@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 spacegaucho
 # SPDX-License-Identifier: GPL-3.0-or-later
-# install-deps.ps1 — install what the Windows side of ut99-tailcat needs:
+# install-deps.ps1 -- install what the Windows side of ut99-tailcat needs:
 #   * tailcat.exe  (pinned release from the GitHub release page, into tools\)
 #   * python       (runs scripts/ut99-bridge.py, the SAME relay the host runs;
 #                   installed via winget when missing)
@@ -62,7 +62,7 @@ function Install-Python {
   # @() matters: PowerShell flattens Get-PythonCommand's 1-element return.
   $py = @(Get-PythonCommand)
   if ($py.Count -gt 0 -and $py[0]) {
-    Write-Host "python: found ($($py -join ' ')) — runs scripts/ut99-bridge.py"
+    Write-Host "python: found ($($py -join ' ')) -- runs scripts/ut99-bridge.py"
     return
   }
   $winget = Get-Command winget -ErrorAction SilentlyContinue
@@ -74,14 +74,14 @@ function Install-Python {
   winget install -e --id Python.Python.3 --accept-source-agreements --accept-package-agreements
   $py = @(Get-PythonCommand)
   if ($py.Count -gt 0 -and $py[0]) { Write-Host "python: installed ($($py -join ' '))" }
-  else { Write-Ut99Err "python installed but not on PATH yet — $newShellHint" }
+  else { Write-Ut99Err "python installed but not on PATH yet -- $newShellHint" }
 }
 
 function Check-Scp {
   if ((Get-Command scp -ErrorAction SilentlyContinue) -or (Get-Command scp.exe -ErrorAction SilentlyContinue)) {
     Write-Host "scp: found (tailcat cp / file-pull works)"
   } else {
-    Write-Ut99Err "scp not found — needed only for 'ut99 file-pull': Settings > Apps > Optional Features > add 'OpenSSH Client' (or: winget install Microsoft.OpenSSH.Beta)"
+    Write-Ut99Err "scp not found -- needed only for 'ut99 file-pull': Settings > Apps > Optional Features > add 'OpenSSH Client' (or: winget install Microsoft.OpenSSH.Beta)"
   }
 }
 
@@ -89,7 +89,7 @@ function Check-Game {
   if (Test-UtGameInstall) {
     Write-Host "UT99: found $env:UT_DIR\UnrealTournament.exe"
   } else {
-    Write-Ut99Err "UT99 not found at $env:UT_DIR — install the OldUnreal 469 full installer (https://oldunreal.com/download/, default target C:\UnrealTournament), or set UT_DIR to your install's System directory."
+    Write-Ut99Err "UT99 not found at $env:UT_DIR -- install the OldUnreal 469 full installer (https://oldunreal.com/download/, default target C:\UnrealTournament), or set UT_DIR to your install's System directory."
   }
 }
 

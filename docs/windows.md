@@ -19,6 +19,11 @@ helpers/ut99-env.ps1      shared defaults and helpers
 ## Requirements
 
 - Windows 10/11. Windows PowerShell 5.1 (built-in) works; pwsh 7 too.
+  All `.ps1`/`.cmd` files are kept **ASCII-only** on purpose: PS 5.1 decodes
+  BOM-less UTF-8 via the ANSI code page, where an em dash byte becomes a
+  smart-quote and breaks parsing in non-English locales ("Token ...
+  inesperado"). A UTF-8 **with BOM** copy would also fix it, but ASCII is
+  bulletproof. `ut99.cmd` additionally uses CRLF line endings.
 - A **native** UT99 install (GOTY + OldUnreal 469 patch), default game
   directory `C:\UnrealTournament\System` — override with `UT_DIR`.
   No wine on Windows: the game runs natively; the Linux host's packed wine

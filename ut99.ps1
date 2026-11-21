@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 spacegaucho
 # SPDX-License-Identifier: GPL-3.0-or-later
-# ut99.ps1 — Windows (PowerShell) wrapper for the client side of ut99-tailcat.
+# ut99.ps1 -- Windows (PowerShell) wrapper for the client side of ut99-tailcat.
 # Counterpart of the bash 'ut99' wrapper; the host/server side stays on Linux.
 #
 #   ut99 client  [tcp...] [options]     game (+ internet bridge)
@@ -9,7 +9,7 @@
 #   ut99 help                           this list
 #
 # Internet play: the Linux host runs 'ut99 server' and gives you its tcp...
-# address; here:  .\ut99.cmd client <tcp...>  — bridge starts with the game and
+# address; here:  .\ut99.cmd client <tcp...>  -- bridge starts with the game and
 # one Ctrl+C stops both.
 #
 # Every setting is also an environment variable (UT_UDP_PORT, UT_DIR,
@@ -29,7 +29,7 @@ $root = $PSScriptRoot
 
 function Show-Usage {
   Write-Host @"
-ut99 (Windows) — client side of ut99-tailcat
+ut99 (Windows) -- client side of ut99-tailcat
 
 Commands:
   client [tcp...] [options]      start the bridge (unless --lan/--config) + the
@@ -139,7 +139,7 @@ switch ($Command.ToLower()) {
       if ($admin) { Write-Ut99Err "ut99 client --config starts no admin forward (use 'ut99 client <tcp...> --admin' for that)"; exit 2 }
       $env:UT_SHOW_CONFIG = "1"; $env:UT_AUTOJOIN = "0"
       $rend = Get-IniValue (Join-Path $env:UT_DIR "UnrealTournament.ini") "Engine.Engine" "GameRenderDevice"
-      if ($rend) { Write-Ut99 "startup wizard ON — current renderer: $rend ([Engine.Engine] GameRenderDevice)" }
+      if ($rend) { Write-Ut99 "startup wizard ON -- current renderer: $rend ([Engine.Engine] GameRenderDevice)" }
       else       { Write-Ut99 "startup wizard ON" }
       Write-Ut99 "in the wizard choose 'Change your 3D video device' to pick a renderer, or a safe-mode option to troubleshoot"
     }

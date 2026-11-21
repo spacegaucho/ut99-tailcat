@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 spacegaucho
 # SPDX-License-Identifier: GPL-3.0-or-later
-# ut99-env.ps1 — shared configuration and helpers for the Windows (PowerShell)
+# ut99-env.ps1 -- shared configuration and helpers for the Windows (PowerShell)
 # side of ut99-tailcat. Dot-sourced by ut99.ps1 and by the scripts/*.ps1.
 #
 # This mirrors helpers/ut99-env.sh: every value can be overridden through the
@@ -48,7 +48,7 @@ if (-not $env:UT99_TAILCAT_VERSION) { $env:UT99_TAILCAT_VERSION = "0.7.0" }
 function Write-Ut99([string]$msg) { Write-Host "ut99: $msg" }
 function Write-Ut99Err([string]$msg) { Write-Host "ut99: $msg" -ForegroundColor Yellow }
 
-# Get-TailcatPath — find tailcat.exe: UT99_TAILCAT_BIN as an explicit
+# Get-TailcatPath -- find tailcat.exe: UT99_TAILCAT_BIN as an explicit
 # override first, then PATH, then UT99_TOOLS_DIR (where deps installs it).
 function Get-TailcatPath {
   if ($env:UT99_TAILCAT_BIN) {
@@ -69,7 +69,7 @@ function Get-TailcatPath {
   return $null
 }
 
-# python_command — resolve the python that runs ut99-bridge.py (python3 /
+# python_command -- resolve the python that runs ut99-bridge.py (python3 /
 # python / py -3, or UT99_PYTHON override).  Returns an array: exe + leading args.
 function Get-PythonCommand {
   if ($env:UT99_PYTHON) {
@@ -86,8 +86,8 @@ function Get-PythonCommand {
   return $null
 }
 
-# tailcat_key_file — where tailcat stores saved keys (Windows: %APPDATA%\tailcat,
-# Linux: $XDG_CONFIG_HOME/tailcat — checked too so local testing works).
+# tailcat_key_file -- where tailcat stores saved keys (Windows: %APPDATA%\tailcat,
+# Linux: $XDG_CONFIG_HOME/tailcat -- checked too so local testing works).
 function Get-TailcatKeyFile([string]$name) {
   $dirs = @()
   if ($env:TAILCAT_CONFIG) { $dirs += $env:TAILCAT_CONFIG }
@@ -104,7 +104,7 @@ function Get-TailcatKeyFile([string]$name) {
   return (Join-Path (Join-Path $HOME "AppData/Roaming/tailcat") (Join-Path "keys" "$name.private.json"))
 }
 
-# Invoke-Tailcat — runs tailcat inline, adding --key when TAILCAT_KEY is set
+# Invoke-Tailcat -- runs tailcat inline, adding --key when TAILCAT_KEY is set
 # (generating the named key once, so its tcp... address stays stable).
 # Returns the exit code; output streams to the console.
 function Invoke-Tailcat([string[]]$args_) {
@@ -125,7 +125,7 @@ function Invoke-Tailcat([string[]]$args_) {
   return $LASTEXITCODE
 }
 
-# Start-TailcatJob — same as Invoke-Tailcat but backgrounded via Start-Process;
+# Start-TailcatJob -- same as Invoke-Tailcat but backgrounded via Start-Process;
 # returns the Process object (for polling/Stop-Process).
 function Start-TailcatJob([string[]]$args_) {
   $tc = Get-TailcatPath
@@ -191,7 +191,7 @@ function Test-UtGameInstall {
 
 # --- console/Ctrl+C helpers (shared by the polling loops) ------------------------
 
-# Start-CtrlCHandler — Ctrl+C is caught instead of killing the script, so the
+# Start-CtrlCHandler -- Ctrl+C is caught instead of killing the script, so the
 # Stop... cleanup always runs for the child processes (tailcat/python/game).
 # .NET raises Console.CancelKeyPress on Ctrl+C (and on SIGINT).  The handler
 # must be compiled code: a PowerShell script block invoked from the signal

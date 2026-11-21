@@ -1,16 +1,16 @@
 # SPDX-FileCopyrightText: 2026 spacegaucho
 # SPDX-License-Identifier: GPL-3.0-or-later
-# client-pull-files.ps1 — Windows counterpart of client-pull-files.sh: fetch
+# client-pull-files.ps1 -- Windows counterpart of client-pull-files.sh: fetch
 # files from a host running 'ut99 file-serve' through tailcat's file service,
 # verify the sha256, into files/ (default).
 #
 # tailcat cp drives scp through the tunnel, so you get scp's progress display
-# (needs scp.exe — the Windows OpenSSH client, an "Optional Feature" on
+# (needs scp.exe -- the Windows OpenSSH client, an "Optional Feature" on
 # Windows 10/11; ut99 deps tells you if it is missing).
 # Remote paths are relative to the directory the host serves (default files/).
 #
 # The .sha256 is fetched first: if the local file already matches it, the
-# (expensive) download is skipped — re-running this script is cheap. --force
+# (expensive) download is skipped -- re-running this script is cheap. --force
 # re-fetches regardless.
 #
 # Note: the default ut99-wineprefix.tgz is a WINE prefix for Linux clients; a
@@ -47,7 +47,7 @@ if ($Deploy) {
 }
 
 if (-not (Get-Command scp -ErrorAction SilentlyContinue) -and -not (Get-Command scp.exe -ErrorAction SilentlyContinue)) {
-  Write-Ut99Err "scp not found — tailcat cp needs it. Windows: Settings > Apps > Optional Features > add 'OpenSSH Client'."
+  Write-Ut99Err "scp not found -- tailcat cp needs it. Windows: Settings > Apps > Optional Features > add 'OpenSSH Client'."
   exit 1
 }
 
@@ -60,7 +60,7 @@ $sumFile = Join-Path $Dir "$Name.sha256"
 
 # Dialing a tailcat node we have not talked to yet can time out once
 # ("Dial: context deadline exceeded") while the bootstrap warms up, so a
-# failure is retried once — the first pull after a host comes up is reliable.
+# failure is retried once -- the first pull after a host comes up is reliable.
 function Invoke-TailcatCp([string[]]$cpArgs) {
   $rc = Invoke-Tailcat $cpArgs
   if ($rc -eq 0) { return 0 }
@@ -94,9 +94,9 @@ if (-not $Force -and (Test-SumMatches)) {
 if (-not $NoVerify) {
   if ((Test-Path $sumFile) -and (Test-Path (Join-Path $Dir $Name))) {
     Write-Host "Verifying checksum..."
-    if (Test-SumMatches) { Write-Host "OK" } else { Write-Ut99Err "CHECKSUM MISMATCH — do not use $Dir\$Name"; exit 1 }
+    if (Test-SumMatches) { Write-Host "OK" } else { Write-Ut99Err "CHECKSUM MISMATCH -- do not use $Dir\$Name"; exit 1 }
   } else {
-    Write-Ut99Err "warning: no $Name.sha256 to check against — checksum not verified"
+    Write-Ut99Err "warning: no $Name.sha256 to check against -- checksum not verified"
   }
 } else {
   Write-Host "Verification skipped (--no-verify)."

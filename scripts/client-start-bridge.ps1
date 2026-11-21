@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 spacegaucho
 # SPDX-License-Identifier: GPL-3.0-or-later
-# client-start-bridge.ps1 — client side of the tailcat bridge (Windows).
+# client-start-bridge.ps1 -- client side of the tailcat bridge (Windows).
 #
 # Chain (client side):
 #   UT99 client --UDP 127.0.0.1:7777/7778--> ut99-bridge.py relay --TCP 127.0.0.1:8777--> tailcat forward

@@ -1,12 +1,12 @@
 # SPDX-FileCopyrightText: 2026 spacegaucho
 # SPDX-License-Identifier: GPL-3.0-or-later
-# client-start-ut99.ps1 — launch the native Windows UT99 client (OldUnreal 469
+# client-start-ut99.ps1 -- launch the native Windows UT99 client (OldUnreal 469
 # install) and auto-join a server.  Windows counterpart of
 # scripts/client-start-ut99.sh; extra arguments are passed to the game.
 #
 # Auto-join: the server address as the first positional argument.  The join
 # proceeds while the intro movies play (~15 s).  If you land on the main menu
-# instead, nothing was listening on the port yet — start the host's server and
+# instead, nothing was listening on the port yet -- start the host's server and
 # bridge first.  Fallback: Multiplayer > Join Game > Open Game > 127.0.0.1:<port>
 # (with the bridge up, 127.0.0.1 is the host).
 #
@@ -37,7 +37,7 @@ if ($env:UT_AUTOJOIN -ne "0") {
 # of joining, so a normal run scrubs any stale copy first.
 #
 # UT_SHOW_CONFIG=1 turns that behaviour into the feature: plant the marker on
-# purpose, and 469's own wizard opens — "Change your 3D video device" (the
+# purpose, and 469's own wizard opens -- "Change your 3D video device" (the
 # renderer list), "Change your audio device", and the safe-mode options.  Picks
 # are written to UnrealTournament.ini ([Engine.Engine] GameRenderDevice /
 # GameAudioDevice); closing the wizard the normal way removes the marker again.
@@ -46,7 +46,7 @@ if ($env:UT_SHOW_CONFIG -eq "1") { Set-Content -Path $marker -Value "" -NoNewlin
 else { Remove-Item $marker -Force -ErrorAction SilentlyContinue }
 
 if (-not (Test-UtGameInstall)) {
-  Write-Ut99Err "UT99 not found at $env:UT_DIR\UnrealTournament.exe — install OldUnreal 469 (default C:\UnrealTournament) or set UT_DIR"
+  Write-Ut99Err "UT99 not found at $env:UT_DIR\UnrealTournament.exe -- install OldUnreal 469 (default C:\UnrealTournament) or set UT_DIR"
   exit 1
 }
 
@@ -60,7 +60,7 @@ if ($env:UT_SHOW_CONFIG -eq "1") {
   Write-Host "Startup wizard: pick 'Change your 3D video device' for the renderer,"
   Write-Host "'Change your audio device' for sound, or one of the safe-mode options."
 } elseif ($gargs.Count -gt 0 -and $gargs[0] -notmatch '^-') {
-  Write-Host "Auto-joining $($gargs[0]) — the join proceeds during the intro movies."
+  Write-Host "Auto-joining $($gargs[0]) -- the join proceeds during the intro movies."
   Write-Host "Fallback if it fails: Multiplayer > Join Game > Open Game > 127.0.0.1:$env:UT_UDP_PORT"
 } else {
   Write-Host "No auto-join: the game opens at its main menu."
