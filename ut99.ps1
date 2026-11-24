@@ -36,6 +36,7 @@ Commands:
                                  game; Ctrl+C stops both
   file-pull <tcp...> [options]   fetch files from a host's 'ut99 file-serve'
                                  [--dir DIR] [--tgz NAME] [--force] [--no-verify]
+                                 [--deploy]
   deps                           install tailcat.exe + Python 3, check scp + game
   help                           this list
 
@@ -203,6 +204,7 @@ switch ($Command.ToLower()) {
         "--tgz"      { $argv += "-Name"; continue }
         "--force"    { $argv += "-Force"; continue }
         "--no-verify"{ $argv += "-NoVerify"; continue }
+        "--deploy"   { $argv += "-Deploy"; continue }
         default      { $argv += $a; continue }
       }
     }

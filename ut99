@@ -42,8 +42,10 @@ ${B}ut99${R} — Unreal Tournament 99 over LAN or the internet (tailcat + framed
 
 ${B}USAGE${R}
   ${K}ut99 server${R}  [options]        Dedicated server. Default also starts the
-                                tailcat host bridge and prints the tcp...
-                                address; the host player joins with \`${K}ut99 client\`${R}.
+                                tailcat host bridge and prints ready-to-paste
+                                friend join commands; -v/--verbose adds the
+                                full bridge/tailcat logs; the host player
+                                joins with \`${K}ut99 client\`${R}.
   ${K}ut99 client${R}  [tcp...] [opts]   Game client. With a tcp... address it starts the
                                 client bridge first, waits until the tunnel is
                                 up, then launches the game (auto-joins during
@@ -58,10 +60,11 @@ ${B}USAGE${R}
                                 out of User.ini in the packed copy (key
                                 bindings and settings are kept).
   ${K}ut99 deploy${R}  [--tgz PATH] [--prefix DIR] [--force]
-  ${K}ut99 file-serve${R} [DIR] [--dir DIR] [--tc-key NAME]
+  ${K}ut99 file-serve${R} [DIR] [--dir DIR] [--tc-key NAME] [-v]
                                 Serve DIR (default ./files: the tgz + .sha256)
-                                read-only over tailcat's file service; friends
-                                fetch it with tailcat cp (see command help).
+                                read-only over tailcat's file service; prints
+                                the exact fetch commands for friends; -v also
+                                reports each friend pulling files.
   ${K}ut99 file-pull${R} <tcp...> [--dir DIR] [--tgz NAME] [--force] [--no-verify]
                           [--deploy]
                                 Fetch the tgz + .sha256 from a host's file-serve
@@ -302,12 +305,14 @@ cmd_server() {
       --admin-pass) admin_pass="$2"; shift 2 ;;
       --prefix)   export WINEPREFIX="$2"; shift 2 ;;
       --wine-bin) export WINE_BIN="$2"; shift 2 ;;
+      -v|--verbose) export UT99_VERBOSE=1; shift ;;
       -h|--help)  sed -n '/^SERVER game options/,/^Networking options (server)/p' <<EOF
 SERVER game options
   --map NAME  --mode ctf|dm|instagib|team|dom  --instagib  --game CLASS
   --mutators a,b  --opts RAW  --bots N  --skill 0-7  --goal N  --time MIN
   --no-ini  --keep-uplinks   --lan  --port N  --bridge-port N  --tc-key NAME
   --admin  --admin-port N  --admin-pass PASS   --prefix DIR  --wine-bin PATH
+  -v|--verbose   show the full bridge/tailcat logs (default: a curated view)
 EOF
         exit 0 ;;
       *) err "unknown server option: $1"; exit 2 ;;
@@ -454,18 +459,30 @@ EOF
 
   STARTED_BRIDGE=1
   job_pipe server "$S/host-start-server.sh"
-  # Same job_pipe pattern (prefixed output), but the awk additionally watches
-  # for tailcat's 'listening ... address: tcp...' line and prints a ready-to-
-  # copy join command built from the address tailcat actually generated.
+  # Same job_pipe pattern (prefixed output), but the awk additionally:
+  #   - watches for tailcat's 'listening ... tcp...' line and prints a
+  #     ready-to-copy join command built from the address tailcat actually
+  #     generated (Linux + Windows variants),
+  #   - by default drops the bridge's plumbing chatter (relay setup lines,
+  #     bootstrap region, the raw 'Server listening' line the join block
+  #     replaces) — '-v|--verbose' shows everything as it always was.
   ( "$S/host-start-bridge.sh" 2>&1 \
-    | awk -v tag='[bridge] ' -v key="$TAILCAT_KEY" '
-        { print tag $0; fflush() }
-        !found && /listening with/ {
-          for (i = 1; i <= NF; i++)
-            if ($i ~ /^tcp[A-Za-z0-9_-]+$/) { addr = $i; found = 1 }
-          if (found) {
+    | awk -v tag='[bridge] ' -v key="$TAILCAT_KEY" -v v="${UT99_VERBOSE:-0}" '
+        {
+          if (/listening with/ && !found) {
+            for (i = 1; i <= NF; i++)
+              if ($i ~ /^tcp[A-Za-z0-9_-]+$/) { addr = $i; found = 1 }
+          }
+          noisy = ($0 ~ /bootstrap relay region/ || $0 ~ /^relay: / ||
+                   $0 ~ /serving TCP ports/ || $0 ~ /also serving the web admin/ ||
+                   $0 ~ /^Bridge running/)
+          skip = (v != 1 && (noisy || (found && /listening with/)))
+          if (!skip) { print tag $0; fflush() }
+          if (found && !printed) {
+            printed = 1
             print tag "Friends join with:"
-            print tag "  ./ut99 client " addr
+            print tag "  Linux/macOS:  ./ut99 client " addr
+            print tag "  Windows:      .\\ut99.cmd client " addr
             if (key != "")
               print tag "(pass --tc-key " key " again to get this same address back on restart)"
             print tag "You (this machine):  ./ut99 client"
@@ -677,6 +694,7 @@ cmd_bridge() {
           --bridge-port) export BRIDGE_TCP_PORT="$2"; need_int --bridge-port "$2"; shift 2 ;;
           --port)        export UT_UDP_PORT="$2"; need_int --port "$2"; shift 2 ;;
           --tc-key)      export TAILCAT_KEY="$2"; shift 2 ;;
+          -v|--verbose)  export UT99_VERBOSE=1; shift ;;
           *) err "unknown bridge host option: $1"; exit 2 ;;
         esac
       done
@@ -689,6 +707,7 @@ cmd_bridge() {
           --host-port)   export HOST_BRIDGE_TCP_PORT="$2"; need_int --host-port "$2"; shift 2 ;;
           --port)        export UT_UDP_PORT="$2"; need_int --port "$2"; shift 2 ;;
           --tc-key)      export TAILCAT_KEY="$2"; shift 2 ;;
+          -v|--verbose)  export UT99_VERBOSE=1; shift ;;
           *) err "unknown bridge client option: $1"; exit 2 ;;
         esac
       done
@@ -747,30 +766,33 @@ cmd_file_serve() {
   # that address times out ("Dial: context deadline exceeded") while the
   # game bridge's serve holds the same key.
   export TAILCAT_KEY="${UT99_FILE_SERVE_KEY:-ut99-files}"
+  local pos=()
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --dir)    export UT99_FILE_SERVE_DIR="$2"; shift 2 ;;
       --tc-key) export TAILCAT_KEY="$2"; shift 2 ;;
+      -v|--verbose) export UT99_VERBOSE=1; shift ;;
       -h|--help) cat <<'EOF'
-ut99 file-serve [DIR] [--dir DIR] [--tc-key NAME]
+ut99 file-serve [DIR] [--dir DIR] [--tc-key NAME] [-v|--verbose]
   Serves DIR (default: the repo's files/ directory) read-only through
   tailcat's files service (SFTP over tailcat; the system scp does the
   transferring). Nothing is served until this command runs.
   Uses its own tailcat key (ut99-files) so it coexists with 'ut99 server'
   on the same machine; --tc-key or UT99_FILE_SERVE_KEY overrides.
+  Output stays quiet until the address is up, then prints the exact
+  fetch commands friends should paste.  -v|--verbose also shows each
+  friend connection as they pull files (tailcat logs fetch starts, not
+  fetch completions).
 
   Friend side (their own clone/copy of this repo, on their machine):
     ./ut99 deps                                   # installs tailcat, checks python3 + wine
-    mkdir -p files
-    tailcat cp <tcp...>:ut99-wineprefix.tgz files/
-    tailcat cp <tcp...>:ut99-wineprefix.tgz.sha256 files/
-    ./ut99 deploy                                 # checksum + extract
+    ./ut99 file-pull <tcp...> --deploy            # fetch + verify + extract
 EOF
         exit 0 ;;
-      *) break ;;
+      *) pos+=("$1"); shift ;;
     esac
   done
-  exec "$S/host-serve-files.sh" "$@"
+  exec "$S/host-serve-files.sh" ${pos[@]+"${pos[@]}"}
 }
 
 cmd_file_pull() {
@@ -831,18 +853,18 @@ _ut99_completions() {
   esac
 
   case "$sub" in
-    server)     opts="--map --mode --instagib --game --mutators --opts --bots --skill --goal --time --no-ini --keep-uplinks --lan --port --bridge-port --tc-key --admin --admin-port --admin-pass --prefix --wine-bin" ;;
+    server)     opts="--map --mode --instagib --game --mutators --opts --bots --skill --goal --time --no-ini --keep-uplinks --lan --port --bridge-port --tc-key --admin --admin-port --admin-pass --prefix --wine-bin -v --verbose" ;;
     client)     opts="--lan --join --name --port --bridge-port --host-port --tc-key --no-join --config --admin --admin-port --host-admin-port --xvfb --no-xvfb --xvfb-res --prefix --wine-bin" ;;
     bridge)     if [ "$COMP_CWORD" -eq 2 ]; then COMPREPLY=( $(compgen -W "host client" -- "$cur") ); return 0; fi
                 if [ "${COMP_WORDS[2]}" = host ]; then
-                  opts="--bridge-port --port --tc-key"
+                  opts="--bridge-port --port --tc-key -v --verbose"
                 else
-                  opts="--bridge-port --host-port --port --tc-key"
+                  opts="--bridge-port --host-port --port --tc-key -v --verbose"
                 fi ;;
     probe)      opts="" ;;
     pack)       opts="--out --keep --prefix" ;;
     deploy)     opts="--tgz --prefix --force" ;;
-    file-serve) opts="--dir --tc-key" ;;
+    file-serve) opts="--dir --tc-key -v --verbose" ;;
     file-pull)  opts="--dir --tgz --force --no-verify --deploy" ;;
     deps)       opts="" ;;
     *)          opts="" ;;

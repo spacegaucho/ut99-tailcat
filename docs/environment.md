@@ -16,6 +16,7 @@ system wine):
 | `HOST_BRIDGE_TCP_PORT`| `8777`                                        | Host's bridge port (client-side override) |
 | `TC_ADDR`             | —                                             | Host's tailcat address (client side) |
 | `TAILCAT_KEY`         | *(empty)*                                     | Saved key name for a stable `tcp...` address |
+| `UT99_VERBOSE`        | `0`                                           | `1` = full logs instead of the curated default view (`--verbose`/`-v` on `ut99 server`, `ut99 bridge host`/`client`, `ut99 file-serve`); on file-serve also reports each friend pulling files |
 | `UT99_ADMIN_PORT`     | *(empty)*                                     | Web admin HTTP port; `ut99 server --admin` sets/exports it (host bridge then serves that port too). Set it manually to use `host-start-bridge.sh` directly with an admin-enabled server |
 | `UT99_ADMIN_PASS`     | *(empty = random)*                            | Server web admin password (`admin` user), same as `--admin-pass` |
 | `UT99_ADMIN_LOCAL`    | `18080`                                       | Client-side local port of the forwarded admin UI (`--admin-port`) |

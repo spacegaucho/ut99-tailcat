@@ -10,7 +10,13 @@ own `WINEPREFIX` and can immediately run everything.
 ```sh
 # host side
 ./ut99 pack          # -> files/ut99-wineprefix.tgz (+ .sha256), ~560M
-./ut99 file-serve    # serves both files read-only over tailcat; copy its tcp... address
+./ut99 file-serve    # serves both files read-only over tailcat; once the
+                     # tcp... address is up it prints the exact fetch
+                     # commands your friends should paste:
+# Friends fetch with (while this runs):
+#   Linux/macOS:  ./ut99 file-pull tcpGFwWC…FpGQEt --deploy
+#   Windows:      .\ut99.cmd file-pull tcpGFwWC…FpGQEt  (--deploy is Linux-only)
+# (no repo clone:  tailcat cp tcpGFwWC…FpGQEt:ut99-wineprefix.tgz files/)
 ```
 
 Getting the files on the client side (what each friend runs):
@@ -62,6 +68,14 @@ Notes for the fetching side:
 - No tailcat on the friend's machine yet, or prefer a plain download? Serve
   the same two files any other way: `scp`, `sftp`, a file host, or on the host
   `python3 -m http.server -d files 8000` and `curl -O` on the client side.
+- **See when friends pull files**: `./ut99 file-serve -v` (or `--verbose`,
+  same as `UT99_VERBOSE=1`) runs tailcat with its verbose log and keeps only
+  the meaningful lines — each fetch prints something like
+  `# friend connected from [fd7a:115c:…]:50777 — pulling files` the moment
+  the friend's SFTP connection opens (the tailnet address identifies who).
+  tailcat logs fetch *starts*, not fetch completions or file names, and the
+  default quiet view shows nothing. The same `-v` on `ut99 server` restores
+  the full raw bridge/tailcat log instead of the curated view.
 
 ## What gets packed
 

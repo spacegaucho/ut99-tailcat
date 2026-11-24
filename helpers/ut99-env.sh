@@ -89,15 +89,20 @@ find_ci() {
 # out if the file is missing, so a first-time named key is generated here
 # once — from then on the tcp... address derived from it stays the same.
 tailcat_exec() {
+  # UT99_VERBOSE=1 (wrapper flags --verbose/-v) adds tailcat's global
+  # --verbose; callers decide what to do with the raw log (see
+  # host-serve-files.sh and the ut99 wrapper's bridge filter).
+  local vt=()
+  [ "${UT99_VERBOSE:-0}" = 1 ] && vt+=(--verbose)
   if [ -n "$TAILCAT_KEY" ]; then
     local keyfile="${XDG_CONFIG_HOME:-$HOME/.config}/tailcat/keys/$TAILCAT_KEY.private.json"
     if [ ! -f "$keyfile" ]; then
       echo "tailcat: generating saved key '$TAILCAT_KEY' (first run, its tcp... address is now stable)"
       tailcat genkey --key "$TAILCAT_KEY" || { echo "tailcat: genkey --key $TAILCAT_KEY failed" >&2; return 1; }
     fi
-    exec tailcat --key "$TAILCAT_KEY" "$@"
+    exec tailcat ${vt[@]+"${vt[@]}"} --key "$TAILCAT_KEY" "$@"
   else
-    exec tailcat "$@"
+    exec tailcat ${vt[@]+"${vt[@]}"} "$@"
   fi
 }
 

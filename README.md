@@ -54,15 +54,16 @@ files/                  pack output (gitignored)
 ```sh
 ./ut99 deps                     # tailcat + python3 if missing, checks wine
 
-# one terminal: starts server AND bridge, prints the tcp... address and a
-# ready-to-copy join command for your friends
+# one terminal: starts server AND bridge, prints ready-to-paste join
+# commands (Linux + Windows) built from the tcp... address it generates
 ./ut99 server --mode instagib --bots 4
 
 # [optional, once per new friend] friend has no game install yet, so the
 # host serves them the game files:
 ./ut99 pack                     # -> files/ut99-wineprefix.tgz (+ .sha256)
 ./ut99 file-serve               # second terminal, alongside the server:
-                                # prints a SECOND tcp... address, for the files
+                                # prints a SECOND tcp... address plus the exact
+                                # file-pull commands your friends should paste
 
 ./ut99 probe 7777               # optional: datagram ping proving server is up
 
@@ -114,7 +115,7 @@ The `file-serve` address and the `server` bridge address are two different
 | `ut99 probe [port]` | Send a net-test datagram to `127.0.0.1:port`; a reply proves server/bridge up. |
 | `ut99 pack`     | Pack the wine prefix → `files/ut99-wineprefix.tgz` + `.sha256` (scrubs your player name out of the packed copy). |
 | `ut99 deploy`   | Verify + extract the tarball into `WINEPREFIX`.                    |
-| `ut99 file-serve [DIR]` | Serve `DIR` (default `files/`) read-only through tailcat's file service; friends fetch with `tailcat cp`. |
+| `ut99 file-serve [DIR]` | Serve `DIR` (default `files/`) read-only through tailcat's file service; prints the exact fetch commands friends should paste. `-v` also shows each friend pulling files as it happens. |
 | `ut99 file-pull <tcp...>` | Client side of `file-serve`: fetch the tarball + `.sha256` into `files/` and verify (skips the download when the local copy already matches). |
 | `ut99 deps`     | Install tailcat + python3 if missing; check wine (prints per-distro install hints when absent). |
 | `ut99 --completion bash` | Print the bash completion script — see [docs/completion.md](docs/completion.md). |
@@ -152,6 +153,7 @@ reaches the bots, and when bots spawn: [docs/ini-options.md](docs/ini-options.md
 | `--bridge-port N`| both            | Local TCP port of the relay↔tailcat bridge (default 8777) |
 | `--host-port N`  | client          | Host bridge's TCP port it dials (default 8777) |
 | `--tc-key NAME`  | server/bridge/client | Stable `tcp...` address via a saved tailcat key (created automatically on first use) |
+| `-v` / `--verbose` | server/bridge/file-serve | Full logs instead of the curated default view: on the server the raw bridge/tailcat output; on file-serve each friend's file pull reported as it starts |
 | `--admin`        | server/client   | Server: enable UT99's built-in web admin on the running match (bridge serves that port too). Client: open the host's admin locally at `http://127.0.0.1:18080/ServerAdmin/` — see [docs/admin-api.md](docs/admin-api.md) |
 | `--admin-port N` | server/client   | Server: admin HTTP port (default 8080). Client: local forwarded port (default 18080) |
 | `--admin-pass PASS` | server       | Admin password (user `admin`); default: random 12-char, printed at startup |
