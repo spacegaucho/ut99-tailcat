@@ -12,7 +12,7 @@ Everything below was verified live on the OldUnreal 469 GOTY install.
 ## Enabling it
 
 ```bash
-./ut99 server --admin                      # web admin on :8080, random password printed at startup
+./ut99 server --admin                      # web admin on :8887, random password printed at startup
 ./ut99 server --admin --admin-port 8090 --admin-pass secretpass
 ```
 
@@ -31,9 +31,9 @@ AdminPassword=secretpass
   it in the startup lines. An **empty** `AdminPassword` in the ini lets
   *anyone* through (the engine only checks a non-empty string), so ut99 always
   sets one — keep it that way if you edit the ini by hand.
-- `--admin-port` picks the HTTP port; 8080 is a common collision, pick another
-  if your machine already uses it. The engine binds `0.0.0.0`, so LAN hosts
-  can reach it directly.
+- `--admin-port` picks the HTTP port.  The default 8887 deliberately dodges
+  8080, the most crowded HTTP alt-port; pick another if 8887 is taken.  The
+  engine binds `0.0.0.0`, so LAN hosts can reach it directly.
 - The pages are plain HTTP with Basic auth (credentials in clear text). Over
   the tailcat tunnel that's fine (the tunnel is encrypted); over a plain LAN
   treat the password as LAN-only.
@@ -49,7 +49,7 @@ The host bridge serves the admin port alongside the game port
 ```
 
 `--admin-port` changes the local port (default 18080); `--host-admin-port`
-must match what the server used (default 8080). The admin forward is a
+must match what the server used (default 8887).  The admin forward is a
 separate job: if it fails (port clash, host without `--admin`) the game run
 is unaffected. On LAN, `./ut99 client --lan --admin` just prints the host's
 admin URL — nothing to forward.

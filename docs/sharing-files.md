@@ -15,7 +15,7 @@ own `WINEPREFIX` and can immediately run everything.
                      # commands your friends should paste:
 # Friends fetch with (while this runs):
 #   Linux/macOS:  ./ut99 file-pull tcpGFwWC…FpGQEt --deploy
-#   Windows:      .\ut99.cmd file-pull tcpGFwWC…FpGQEt  (--deploy is Linux-only)
+#   Windows:      .\ut99.cmd file-pull tcpGFwWC…FpGQEt --deploy
 # (no repo clone:  tailcat cp tcpGFwWC…FpGQEt:ut99-wineprefix.tgz files/)
 ```
 

@@ -107,7 +107,7 @@ ${B}Networking options (server)${R}
   --admin               Enable UT99's built-in web admin (UTServerAdmin) on the
                         running server; the host bridge serves that port too, so
                         friends can open the admin pages too.  See docs/admin-api.md
-  --admin-port N        Web admin HTTP port                 (default 8080)
+  --admin-port N        Web admin HTTP port                 (default 8887)
   --admin-pass PASS     Admin password (user 'admin').  Default: a random one,
                         printed on startup.  An empty ini AdminPassword would let
                         anyone through, so ut99 always sets one.
@@ -131,7 +131,7 @@ ${B}Networking options (client)${R}
   --admin               Open the host's web admin locally: forwards the host's
                         admin port to http://127.0.0.1:<--admin-port>/ServerAdmin/
   --admin-port N        Local port for the forwarded admin UI (default 18080)
-  --host-admin-port N   Host's admin port (default 8080; match the server's)
+  --host-admin-port N   Host's admin port (default 8887; match the server's)
   --xvfb / --no-xvfb    Force / forbid running the game under Xvfb. Default:
                         automatic when DISPLAY is unset (headless sessions).
   --xvfb-res WxH        Xvfb screen size (default 2560x1440 = the game's
@@ -279,7 +279,7 @@ cmd_server() {
   local map=CTF-Face mode=ctf insta=0 game_type="" mutators="" raw_opts=""
   local bots=4 skill=3 goal=5 time=15 lan=0 port="" bridge_port=""
   local uplinks=1 ini=1 m
-  local admin=0 admin_port="${UT99_ADMIN_PORT:-8080}" admin_pass="${UT99_ADMIN_PASS:-}"
+  local admin=0 admin_port="${UT99_ADMIN_PORT:-8887}" admin_pass="${UT99_ADMIN_PASS:-}"
   local ini_file="$UT_DIR/UnrealTournament.ini"
 
   while [ "$#" -gt 0 ]; do
@@ -430,7 +430,8 @@ EOF
       ini_set "$ini_file" UTServerAdmin.UTServerAdmin AdminUsername admin
       ini_set "$ini_file" UTServerAdmin.UTServerAdmin AdminPassword "$admin_pass"
       export UT99_ADMIN_PORT="$admin_port"
-      # 8080 is a crowded port; the engine's WebServer would bind-fail quietly.
+      # The default 8887 dodges 8080 — the most crowded HTTP alt-port.  The
+      # engine's WebServer would bind-fail quietly.
       if (exec 3<>/dev/tcp/127.0.0.1/"$admin_port") 2>/dev/null; then
         exec 3>&- 3<&-
         err "ut99 server: warning: something already listens on 127.0.0.1:$admin_port — the web admin will likely fail to bind; pick another --admin-port"
@@ -498,7 +499,7 @@ EOF
 cmd_client() {
   local tc="" lan=0 join="" name="" port="" bridge_port="" host_port="" nojoin=0
   local config=0
-  local admin=0 admin_local="${UT99_ADMIN_LOCAL:-18080}" host_admin="${UT99_HOST_ADMIN_PORT:-8080}"
+  local admin=0 admin_local="${UT99_ADMIN_LOCAL:-18080}" host_admin="${UT99_HOST_ADMIN_PORT:-8887}"
   local xvfb="" xvfb_res="${UT99_XVFB_RES:-2560x1440}"
   local game_args=() game_cmd=()
 

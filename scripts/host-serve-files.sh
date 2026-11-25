@@ -103,7 +103,7 @@ awk -v v="$verbose" '
       cmds = 1
       print "# Friends fetch with (while this runs):"
       print "#   Linux/macOS:  ./ut99 file-pull " addr " --deploy"
-      print "#   Windows:      .\\ut99.cmd file-pull " addr "  (--deploy is Linux-only)"
+      print "#   Windows:      .\\ut99.cmd file-pull " addr " --deploy"
       print "# (no repo clone:  tailcat cp " addr ":ut99-wineprefix.tgz files/)"
       fflush()
     }

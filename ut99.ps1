@@ -36,7 +36,10 @@ Commands:
                                  game; Ctrl+C stops both
   file-pull <tcp...> [options]   fetch files from a host's 'ut99 file-serve'
                                  [--dir DIR] [--tgz NAME] [--force] [--no-verify]
-                                 [--deploy]
+                                 [--deploy] extract the game tree from
+                                 ut99-wineprefix.tgz into C:\UnrealTournament
+                                 (override with UT99_DEPLOY_DIR; --force
+                                 overwrites an existing install)
   deps                           install tailcat.exe + Python 3, check scp + game
   help                           this list
 
@@ -58,7 +61,7 @@ Client options:
   --admin               Open the host's web admin locally: forwards the host's
                         admin port to http://127.0.0.1:<--admin-port>/ServerAdmin/
   --admin-port N        Local port for the forwarded admin UI (default 18080)
-  --host-admin-port N   Host's admin port to forward (default 8080; match the server's)
+  --host-admin-port N   Host's admin port to forward (default 8887; match the server's)
   --ut-dir DIR          System directory of the native UT99 install
                         (default C:\UnrealTournament\System)
   -- ARGS               Passed to the game untouched

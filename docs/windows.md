@@ -26,12 +26,40 @@ helpers/ut99-env.ps1      shared defaults and helpers
   bulletproof. `ut99.cmd` additionally uses CRLF line endings.
 - A **native** UT99 install (GOTY + OldUnreal 469 patch), default game
   directory `C:\UnrealTournament\System` — override with `UT_DIR`.
-  No wine on Windows: the game runs natively; the Linux host's packed wine
-  prefix (`ut99 pack` / default `file-pull` tarball) is for Linux friends.
+  No wine on Windows: the game runs natively. A friend with no install yet
+  need not install separately: `file-pull --deploy` extracts the host's pack
+  (`ut99 pack`), whose `drive_c\UnrealTournament` is itself a complete native
+  Windows tree — see caveats below.
 - `tailcat.exe` and python: `.\ut99.cmd deps` installs both
   (tailcat v0.7.0 from the pinned GitHub release into `tools\tailcat.exe`,
   python via `winget` when missing). `file-pull` additionally needs
   `scp.exe` — Settings > Apps > Optional Features > **OpenSSH Client**.
+- `tar.exe` for `file-pull --deploy`: built into Windows 10 1803+ and Windows 11
+  (no install needed).
+
+### "python not found" that is not actually missing
+
+Windows ships two fake `python.exe`/`python3.exe` **app execution aliases** in
+`%LOCALAPPDATA%\Microsoft\WindowsApps`, and that folder sits near the front of
+PATH *even after a real python is installed*. Running one of them prints a
+Microsoft Store advertisement and exits with an error — so "the command exists"
+tells you nothing. `Get-PythonCommand` therefore lists **every** `python` and
+`python3` on PATH and keeps only the ones that actually answer `--version` with
+`Python 3.x`, using their full path. Order tried: `python`, `python3`, then
+`py -3`. If a broken candidate is skipped you will see
+
+```
+python: skipping '...\WindowsApps\python3.exe' (it does not run as Python 3 -- a Microsoft Store app-execution alias?)
+```
+
+which is informative, not an error. If python 3 is installed but still not
+picked: Settings > Apps > Advanced app settings > **App execution aliases** →
+turn `python` and `python3` off, or point at the interpreter directly:
+
+```powershell
+$env:UT99_PYTHON = "C:\Users\you\AppData\Local\Programs\Python\Python312\python.exe"
+.\ut99.cmd client tcpGFwWCDL0hpvOh...
+```
 
 ## Friend flow
 
@@ -51,6 +79,10 @@ helpers/ut99-env.ps1      shared defaults and helpers
 
 # maps/mods packs the host serves with ./ut99 file-serve:
 .\ut99.cmd file-pull <file-serve tcp...> --tgz Mypack.7z --dir D:\downloads
+
+# OR: no UT99 installed at all yet -- fetch the host's game pack and extract
+# it as a native install (skips a separate download+patch+469 install):
+.\ut99.cmd file-pull <file-serve tcp...> --deploy    # -> C:\UnrealTournament
 ```
 
 `client` starts the tailcat forward + the framed relay, then launches
@@ -96,20 +128,26 @@ Flags are the friendly form; every setting is also an environment variable
 | `UT99_TAILCAT_VERSION` | `0.7.0` | pinned tailcat release |
 | `UT99_PYTHON` | auto | python used to run `scripts/ut99-bridge.py` |
 | `UT99_FILE_PULL_DIR` | `<repo>\files` | default `file-pull` destination |
+| `UT99_DEPLOY_DIR` | parent of `UT_DIR` (`C:\UnrealTournament`) | where `file-pull --deploy` extracts the game tree |
 | `UT_AUTOJOIN` | `1` | `0` opens the main menu instead of auto-joining |
 | `UT_SHOW_CONFIG` | `0` | `1` opens 469's startup wizard (what `--config` sets) |
 | `UT99_ADMIN_LOCAL` | `18080` | local port `--admin` forwards to |
-| `UT99_HOST_ADMIN_PORT` | `8080` | the host's web admin port (`--admin-port` on the host) |
+| `UT99_HOST_ADMIN_PORT` | `8887` | the host's web admin port (`--admin-port` on the host) |
 | `UT99_LOG` | `1` | pass `-log=ut99-client.log -forcelogflush` to the game |
 
 ## file-pull caveats on Windows
 
-- The default tarball `ut99-wineprefix.tgz` is a **Linux wine prefix** — a
-  Windows player doesn't need it (native install). Use `file-pull` for map/mod
-  packs the host serves with `./ut99 file-serve ~/share` or `--dir`, then
-  unpack them into the game's `Maps`/`System` directories yourself.
-- `--deploy` (extract the wine prefix) is intentionally not implemented on
-  Windows; the script warns and drops it.
+- The default tarball `ut99-wineprefix.tgz` is the host's game install packed
+  as a wine prefix — but `drive_c\UnrealTournament` inside it is a complete
+  **native Windows** tree (`UnrealTournament.exe`, `UCC.exe`, GOTY + 469:
+  exactly what the Linux host runs under wine). `--deploy` extracts just that
+  tree into `UT99_DEPLOY_DIR` (default `C:\UnrealTournament`, so the default
+  `UT_DIR` matches), skipping the wine plumbing (`dosdevices`, `drive_c\windows`,
+  registry hives), and refuses to overwrite an existing game unless `--force`.
+  A friend with their own native install does not need `--deploy`.
+- Map/mod packs (host `./ut99 file-serve ~/share`, friend `--tgz NAME`) are
+  download-only: unpack them into the game's `Maps`/`System` directories
+  yourself.
 - The `.sha256` is fetched first; a re-run whose local file already matches
   skips the download (`--force` re-fetches anyway). A transient
   `tailcat cp` failure is retried once.
@@ -120,7 +158,10 @@ Everything here was exercised headlessly with pwsh 7.5 on Linux (same scripts,
 forward-slash paths — Windows accepts them too): wrapper argument handling,
 the full bridge/game orchestration through a live tailcat tunnel with a stub
 `UnrealTournament.exe`, Ctrl+C cleanup, ini name rewriting (CRLF-safe), the
-file-pull cycle against a live `file-serve`, and the deps branch logic.
+file-pull cycle against a live `file-serve`, the `--deploy` extraction against
+the real pack layout (bsdtar — the same implementation Windows' built-in
+`tar.exe` is), and the deps branch logic.
 Natively Windows-only parts — `powershell.exe` 5.1 quirks, `winget` python
-install, OpenSSH `scp.exe` presence, real OldUnreal 469 rendering — can only
+install, OpenSSH `scp.exe` presence, the Microsoft Store python alias stubs the
+python finder now guards against, real OldUnreal 469 rendering — can only
 be verified on an actual Windows box.

@@ -96,8 +96,10 @@ Ctrl+C anywhere stops everything that command started (bridges, server, game).
 LAN-only play: `./ut99 server --lan`, clients join `host-ip:7777`.
 
 Friend on **Windows**? Copy this repo to their machine and use `.\ut99.cmd deps` /
-`.\ut99.cmd client <tcp...>` — the native OldUnreal 469 client, no wine; see
-[docs/windows.md](docs/windows.md).
+`.\ut99.cmd client <tcp...>` — the native OldUnreal 469 client, no wine. They
+don't even need their own game install: `.\ut99.cmd file-pull <file-serve tcp...>
+--deploy` extracts the host's pack as a native Windows game tree
+(`C:\UnrealTournament`); see [docs/windows.md](docs/windows.md).
 
 `--name` writes the player name into `[DefaultPlayer] Name` in `User.ini`
 (the engine takes it from there into the join URL); omit it and the wrapper
@@ -116,7 +118,7 @@ The `file-serve` address and the `server` bridge address are two different
 | `ut99 pack`     | Pack the wine prefix → `files/ut99-wineprefix.tgz` + `.sha256` (scrubs your player name out of the packed copy). |
 | `ut99 deploy`   | Verify + extract the tarball into `WINEPREFIX`.                    |
 | `ut99 file-serve [DIR]` | Serve `DIR` (default `files/`) read-only through tailcat's file service; prints the exact fetch commands friends should paste. `-v` also shows each friend pulling files as it happens. |
-| `ut99 file-pull <tcp...>` | Client side of `file-serve`: fetch the tarball + `.sha256` into `files/` and verify (skips the download when the local copy already matches). |
+| `ut99 file-pull <tcp...>` | Client side of `file-serve`: fetch the tarball + `.sha256` into `files/` and verify (skips the download when the local copy already matches). `--deploy` extracts it: the wine prefix on Linux, the native game tree into `C:\UnrealTournament` on Windows. |
 | `ut99 deps`     | Install tailcat + python3 if missing; check wine (prints per-distro install hints when absent). |
 | `ut99 --completion bash` | Print the bash completion script — see [docs/completion.md](docs/completion.md). |
 
@@ -155,9 +157,9 @@ reaches the bots, and when bots spawn: [docs/ini-options.md](docs/ini-options.md
 | `--tc-key NAME`  | server/bridge/client | Stable `tcp...` address via a saved tailcat key (created automatically on first use) |
 | `-v` / `--verbose` | server/bridge/file-serve | Full logs instead of the curated default view: on the server the raw bridge/tailcat output; on file-serve each friend's file pull reported as it starts |
 | `--admin`        | server/client   | Server: enable UT99's built-in web admin on the running match (bridge serves that port too). Client: open the host's admin locally at `http://127.0.0.1:18080/ServerAdmin/` — see [docs/admin-api.md](docs/admin-api.md) |
-| `--admin-port N` | server/client   | Server: admin HTTP port (default 8080). Client: local forwarded port (default 18080) |
+| `--admin-port N` | server/client   | Server: admin HTTP port (default 8887). Client: local forwarded port (default 18080) |
 | `--admin-pass PASS` | server       | Admin password (user `admin`); default: random 12-char, printed at startup |
-| `--host-admin-port N` | client   | Host's admin port to forward (default 8080; match the server's) |
+| `--host-admin-port N` | client   | Host's admin port to forward (default 8887; match the server's) |
 | `--join HOST:PORT`| client         | Explicit join target                           |
 | `--name NAME`    | client          | Player name → `[DefaultPlayer] Name` in `User.ini`; default: random `Player-XXXX` (engine limit: 16 chars) |
 | `--no-join`      | client          | Start at main menu instead of auto-joining     |

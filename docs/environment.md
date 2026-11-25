@@ -16,11 +16,12 @@ system wine):
 | `HOST_BRIDGE_TCP_PORT`| `8777`                                        | Host's bridge port (client-side override) |
 | `TC_ADDR`             | —                                             | Host's tailcat address (client side) |
 | `TAILCAT_KEY`         | *(empty)*                                     | Saved key name for a stable `tcp...` address |
+| `UT99_PYTHON`         | auto-detected                                 | Python used to run `scripts/ut99-bridge.py`. Windows: leave empty to let the wrapper pick (it verifies each candidate actually reports `Python 3.x`, so Microsoft Store alias stubs are skipped); set it to a full `python.exe` path when auto-detection is not wanted |
 | `UT99_VERBOSE`        | `0`                                           | `1` = full logs instead of the curated default view (`--verbose`/`-v` on `ut99 server`, `ut99 bridge host`/`client`, `ut99 file-serve`); on file-serve also reports each friend pulling files |
-| `UT99_ADMIN_PORT`     | *(empty)*                                     | Web admin HTTP port; `ut99 server --admin` sets/exports it (host bridge then serves that port too). Set it manually to use `host-start-bridge.sh` directly with an admin-enabled server |
+| `UT99_ADMIN_PORT`     | `8887` (`ut99 server --admin`)                | Web admin HTTP port; `ut99 server --admin` sets/exports it (host bridge then serves that port too). Set it manually to use `host-start-bridge.sh` directly with an admin-enabled server |
 | `UT99_ADMIN_PASS`     | *(empty = random)*                            | Server web admin password (`admin` user), same as `--admin-pass` |
 | `UT99_ADMIN_LOCAL`    | `18080`                                       | Client-side local port of the forwarded admin UI (`--admin-port`) |
-| `UT99_HOST_ADMIN_PORT`| `8080`                                        | Host's admin port the client forwards from (`--host-admin-port`) |
+| `UT99_HOST_ADMIN_PORT`| `8887`                                        | Host's admin port the client forwards from (`--host-admin-port`) |
 | `MAP` / `GAME_TYPE` / `EXTRA_OPTS` | `CTF-Face` / `Botpack.CTFGame` / see server flags | Raw server URL settings |
 | `UT_AUTOJOIN`         | `1`                                           | `0` = client starts at main menu     |
 | `UT_SHOW_CONFIG`      | `0`                                           | `1` = plant the recovery marker so 469's startup wizard opens (what `ut99 client --config` sets) |
@@ -33,5 +34,6 @@ system wine):
 | `UT99_FILE_SERVE_DIR` | `files/`                                      | Directory served by `ut99 file-serve` / `host-serve-files.sh` |
 | `UT99_FILE_SERVE_KEY` | `ut99-files`                                  | Saved tailcat key `ut99 file-serve` uses — its own node, so it coexists with `ut99 server`'s serve (`--tc-key` overrides) |
 | `UT99_FILE_PULL_DIR` | `files/`                                       | Directory `ut99 file-pull` fetches into |
+| `UT99_DEPLOY_DIR`    | Windows only: parent of `UT_DIR` (`C:\UnrealTournament`) | Where Windows `file-pull --deploy` extracts the native game tree (Linux `--deploy` extracts the whole prefix into `WINEPREFIX` instead) |
 | `UT99_PREFIX_TGZ`     | `files/ut99-wineprefix.tgz`                   | Tarball to deploy                     |
 | `UT99_DEPLOY_FORCE`   | `0`                                           | `1` = allow extracting over a non-empty prefix |

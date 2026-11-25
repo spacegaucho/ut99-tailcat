@@ -27,7 +27,7 @@ if (-not $env:UT_UDP_PORT)         { $env:UT_UDP_PORT = "7777" }
 if (-not $env:BRIDGE_TCP_PORT)     { $env:BRIDGE_TCP_PORT = "8777" }   # local TCP to tailcat
 if (-not $env:HOST_BRIDGE_TCP_PORT){ $env:HOST_BRIDGE_TCP_PORT = "8777" } # host's serve port
 if (-not $env:UT99_ADMIN_LOCAL)    { $env:UT99_ADMIN_LOCAL = "18080" }
-if (-not $env:UT99_HOST_ADMIN_PORT){ $env:UT99_HOST_ADMIN_PORT = "8080" }
+if (-not $env:UT99_HOST_ADMIN_PORT){ $env:UT99_HOST_ADMIN_PORT = "8887" }
 
 # --- tailcat -------------------------------------------------------------------
 # Stable key name (same name as on the Linux side; each machine keeps its own
@@ -69,20 +69,65 @@ function Get-TailcatPath {
   return $null
 }
 
-# python_command -- resolve the python that runs ut99-bridge.py (python3 /
-# python / py -3, or UT99_PYTHON override).  Returns an array: exe + leading args.
+# python_command -- resolve the python that runs ut99-bridge.py (python /
+# python3 / py -3, or UT99_PYTHON override).  Returns an array: exe + leading args.
+# Two Windows traps make a plain "Get-Command python3 succeeds" test useless:
+#   * Microsoft Store "app execution aliases": python.exe / python3.exe stubs
+#     in %LOCALAPPDATA%\Microsoft\WindowsApps sit ON PATH near the front, even
+#     after a real python is installed (winget/python.org add python.exe and
+#     never remove the aliases).  A stub "exists", and running it prints a
+#     Store advertisement and exits non-zero.
+#   * Because of that, only the FIRST match of a name is a stub: the real
+#     interpreter is the second match of the same name, further down PATH --
+#     so Get-Command needs -All, not just the first hit.
+# Hence: enumerate every match and VERIFY each by actually running --version.
+# Only candidates that really report "Python 3.x" are returned (as their full
+# path, which also dodges the alias entirely).
+function Test-PythonCandidate([string[]]$cand) {
+  if (-not $cand -or $cand.Count -eq 0) { return $false }
+  $exe = $cand[0]
+  $tail = @()
+  if ($cand.Count -gt 1) { $tail = $cand[1..($cand.Count - 1)] }
+  $argv = @($tail) + @("--version")
+  $out = $null
+  try { $out = & $exe $argv 2>$null } catch { return $false }
+  if ($LASTEXITCODE -ne 0) { return $false }
+  $line = (@($out) | Select-Object -First 1)
+  if ($line -match "^Python 3\.") { return $true }
+  return $false   # python 2, or a stub whose output is not a version banner
+}
+function Find-PythonMatches([string]$name) {
+  # -All: every match on PATH in PATH order.  Alias stubs, functions and
+  # aliases of our own are filtered out; only real executables/scripts stay.
+  $seen = @{}
+  $out = @()
+  foreach ($c in @(Get-Command -All $name -ErrorAction SilentlyContinue)) {
+    if ($c.CommandType -ne "Application" -and $c.CommandType -ne "ExternalScript") { continue }
+    $src = $c.Source
+    if (-not $src -or $seen.ContainsKey($src)) { continue }
+    $seen[$src] = $true
+    $out += $src
+  }
+  return $out
+}
 function Get-PythonCommand {
   if ($env:UT99_PYTHON) {
-    if (Get-Command $env:UT99_PYTHON -ErrorAction SilentlyContinue) { return @($env:UT99_PYTHON) }
-    Write-Ut99Err "UT99_PYTHON set but not found: $env:UT99_PYTHON"
+    $c = @($env:UT99_PYTHON)
+    if (Test-PythonCandidate $c) { return $c }
+    Write-Ut99Err "UT99_PYTHON set but it cannot run '--version' as Python 3: $env:UT99_PYTHON"
     return $null
   }
-  foreach ($c in "python3", "python") {
-    if (Get-Command $c -ErrorAction SilentlyContinue) { return @($c) }
+  foreach ($name in "python", "python3") {
+    foreach ($src in (Find-PythonMatches $name)) {
+      if (Test-PythonCandidate @($src)) { return @($src) }
+      Write-Ut99 "python: skipping '$src' (it does not run as Python 3 -- a Microsoft Store app-execution alias?)"
+    }
   }
-  $py = Get-Command py -ErrorAction SilentlyContinue
-  if ($py) { return @("py", "-3") }
+  foreach ($src in (Find-PythonMatches "py")) {
+    if (Test-PythonCandidate @($src, "-3")) { return @($src, "-3") }
+  }
   Write-Ut99Err "python not found (the relay scripts/ut99-bridge.py needs it). Run: .\ut99.cmd deps"
+  Write-Ut99Err "if a python 3 IS installed but hidden behind a Windows Store alias: Settings > Apps > Advanced app settings > App execution aliases, turn python/python3 off -- or set UT99_PYTHON to the real python.exe path."
   return $null
 }
 
